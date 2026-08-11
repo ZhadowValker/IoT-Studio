@@ -1,0 +1,202 @@
+2026-08-11T14:23:14 [STEP] Creating upstream + downstream folder structure
+2026-08-11T14:23:14 [ OK ] Structure ready at /tmp/IoT-Studio/our-velxio
+2026-08-11T14:23:14 [STEP] Ensuring Velxio writable runtime directories
+2026-08-11T14:23:14 [INFO] $ sudo mkdir -p /var/lib/velxio-build
+2026-08-11T14:23:14 [INFO] $ sudo chown -R 1000:1000 /var/lib/velxio-build
+2026-08-11T14:23:14 [INFO] $ chmod -R u+rwX /var/lib/velxio-build
+2026-08-11T14:23:14 [INFO] $ sudo mkdir -p /var/cache/ccache
+2026-08-11T14:23:14 [INFO] $ sudo chown -R 1000:1000 /var/cache/ccache
+2026-08-11T14:23:14 [INFO] $ chmod -R u+rwX /var/cache/ccache
+2026-08-11T14:23:14 [ OK ] Velxio runtime directories are writable
+2026-08-11T14:23:14 [STEP] Installing/checking OS prerequisites as first step
+2026-08-11T14:23:14 [INFO] $ sudo apt-get update
+2026-08-11T14:23:18 [INFO] $ sudo apt-get install -y git curl ca-certificates python3 python3-venv python3-pip python3-full python3-virtualenv python-is-python3 nodejs npm ninja-build pkg-config flex bison cmake ccache libglib2.0-dev libpixman-1-dev libglib2.0-0 libgcrypt20 libslirp0 libpixman-1-0 libfdt1 libusb-1.0-0
+2026-08-11T14:25:59 [STEP] Cloning or updating upstream Velxio
+2026-08-11T14:25:59 [INFO] $ git clone https://github.com/davidmonterocrespo24/velxio.git /tmp/IoT-Studio/our-velxio/upstream/velxio
+2026-08-11T14:26:18 [ OK ] Upstream ready: /tmp/IoT-Studio/our-velxio/upstream/velxio
+2026-08-11T14:26:18 [STEP] Setting backend prerequisites
+2026-08-11T14:26:18 [INFO] $ /usr/bin/python3 -m venv /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv
+2026-08-11T14:26:19 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install --upgrade pip
+2026-08-11T14:26:20 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install -r requirements.txt  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/backend)
+2026-08-11T14:26:25 [ OK ] Backend ready
+2026-08-11T14:26:25 [STEP] Setting frontend prerequisites
+2026-08-11T14:26:25 [INFO] $ npm install  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/frontend)
+2026-08-11T14:27:24 [STEP] Ensuring frontend generator tools at upstream repo root
+2026-08-11T14:27:24 [INFO] $ npm install --save-dev tsx  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T14:27:25 [ OK ] Frontend generator tool tsx is ready at upstream repo root
+2026-08-11T14:27:25 [ OK ] Frontend ready
+2026-08-11T14:27:25 [STEP] Setting Arduino board cores
+2026-08-11T14:27:25 [STEP] Ensuring arduino-cli
+2026-08-11T14:27:25 [INFO] download https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh -> install-arduino-cli.sh attempt 1/2
+2026-08-11T14:27:25 [ OK ] downloaded /tmp/IoT-Studio/our-velxio/downstream/cache/install-arduino-cli.sh
+2026-08-11T14:27:25 [INFO] $ sh /tmp/IoT-Studio/our-velxio/downstream/cache/install-arduino-cli.sh
+2026-08-11T14:27:28 [INFO] $ arduino-cli core update-index
+2026-08-11T14:27:34 [INFO] $ arduino-cli core install arduino:avr
+2026-08-11T14:27:35 [INFO] $ arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+2026-08-11T14:27:35 [INFO] $ arduino-cli core update-index
+2026-08-11T14:27:39 [INFO] $ arduino-cli core install rp2040:rp2040
+2026-08-11T14:27:40 [INFO] $ arduino-cli config add board_manager.additional_urls http://drazzy.com/package_drazzy.com_index.json
+2026-08-11T14:27:40 [INFO] $ arduino-cli core update-index
+2026-08-11T14:27:47 [INFO] $ arduino-cli core install ATTinyCore:avr
+2026-08-11T14:27:48 [INFO] $ arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+2026-08-11T14:27:48 [INFO] $ arduino-cli core update-index
+2026-08-11T14:27:53 [INFO] $ arduino-cli core install esp32:esp32@2.0.17
+2026-08-11T14:28:25 [STEP] Creating upstream + downstream folder structure
+2026-08-11T14:28:25 [ OK ] Structure ready at /tmp/IoT-Studio/our-velxio
+2026-08-11T14:28:25 [STEP] Ensuring Velxio writable runtime directories
+2026-08-11T14:28:25 [INFO] $ sudo mkdir -p /var/lib/velxio-build
+2026-08-11T14:28:25 [INFO] $ sudo chown -R 1000:1000 /var/lib/velxio-build
+2026-08-11T14:28:25 [INFO] $ chmod -R u+rwX /var/lib/velxio-build
+2026-08-11T14:28:25 [INFO] $ sudo mkdir -p /var/cache/ccache
+2026-08-11T14:28:25 [INFO] $ sudo chown -R 1000:1000 /var/cache/ccache
+2026-08-11T14:28:25 [INFO] $ chmod -R u+rwX /var/cache/ccache
+2026-08-11T14:28:25 [ OK ] Velxio runtime directories are writable
+2026-08-11T14:28:25 [STEP] Installing/checking OS prerequisites as first step
+2026-08-11T14:28:25 [INFO] $ sudo apt-get update
+2026-08-11T14:28:28 [INFO] $ sudo apt-get install -y git curl ca-certificates python3 python3-venv python3-pip python3-full python3-virtualenv python-is-python3 nodejs npm ninja-build pkg-config flex bison cmake ccache libglib2.0-dev libpixman-1-dev libglib2.0-0 libgcrypt20 libslirp0 libpixman-1-0 libfdt1 libusb-1.0-0
+2026-08-11T14:28:28 [STEP] Cloning or updating upstream Velxio
+2026-08-11T14:28:28 [INFO] $ git status --porcelain  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T14:28:28 [WARN] Upstream has local changes. Not pulling. Use --force if intentional.
+2026-08-11T14:28:28 [STEP] Setting backend prerequisites
+2026-08-11T14:28:28 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install --upgrade pip
+2026-08-11T14:28:29 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install -r requirements.txt  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/backend)
+2026-08-11T14:28:29 [ OK ] Backend ready
+2026-08-11T14:28:29 [STEP] Setting frontend prerequisites
+2026-08-11T14:28:29 [INFO] $ npm ci  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/frontend)
+2026-08-11T14:28:31 [STEP] Ensuring frontend generator tools at upstream repo root
+2026-08-11T14:28:31 [INFO] $ npm install --save-dev tsx  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T14:28:31 [ OK ] Frontend generator tool tsx is ready at upstream repo root
+2026-08-11T14:28:31 [ OK ] Frontend ready
+2026-08-11T14:28:31 [STEP] Setting Arduino board cores
+2026-08-11T14:28:31 [STEP] Ensuring arduino-cli
+2026-08-11T14:28:31 [ OK ] arduino-cli already installed
+2026-08-11T14:28:31 [INFO] $ arduino-cli core update-index
+2026-08-11T14:28:36 [INFO] $ arduino-cli core install arduino:avr
+2026-08-11T14:28:37 [INFO] $ arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+2026-08-11T14:28:37 [INFO] $ arduino-cli core update-index
+2026-08-11T14:28:44 [INFO] $ arduino-cli core install rp2040:rp2040
+2026-08-11T14:28:45 [INFO] $ arduino-cli config add board_manager.additional_urls http://drazzy.com/package_drazzy.com_index.json
+2026-08-11T14:28:45 [INFO] $ arduino-cli core update-index
+2026-08-11T14:28:51 [INFO] $ arduino-cli core install ATTinyCore:avr
+2026-08-11T14:28:52 [INFO] $ arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+2026-08-11T14:28:52 [INFO] $ arduino-cli core update-index
+2026-08-11T14:28:57 [INFO] $ arduino-cli core install esp32:esp32@2.0.17
+2026-08-11T14:30:01 [ OK ] Arduino cores ready
+2026-08-11T14:30:01 [STEP] Setting ESP-IDF prerequisites
+2026-08-11T14:30:01 [INFO] $ git clone -b v4.4.7 --recursive --depth=1 --shallow-submodules https://github.com/espressif/esp-idf.git /tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf
+2026-08-11T14:35:42 [INFO] $ sudo apt-get install -y python3-full python3-virtualenv python-is-python3
+2026-08-11T14:35:42 [INFO] $ /tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf/install.sh esp32,esp32c3  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf)
+2026-08-11T14:36:21 [INFO] $ git clone --branch 2.0.17 --depth=1 --recursive --shallow-submodules https://github.com/espressif/arduino-esp32.git /tmp/IoT-Studio/our-velxio/downstream/cache/arduino-esp32
+2026-08-11T14:36:49 [ OK ] ESP-IDF ready
+2026-08-11T14:36:49 [STEP] Building QEMU native .so files from source using lcgamboa build script
+2026-08-11T14:36:49 [INFO] $ git clone --depth=1 --branch picsimlab-esp32 https://github.com/lcgamboa/qemu.git /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa
+2026-08-11T14:36:54 [INFO] $ sudo apt-get update
+2026-08-11T14:36:57 [INFO] $ sudo apt-get install -y git ninja-build pkg-config libglib2.0-dev libpixman-1-dev python3 python3-venv python3-pip flex bison
+2026-08-11T14:36:57 [INFO] $ bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa)
+2026-08-11T14:37:12 [FAIL] Command failed with exit code 2: bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh
+2026-08-11T15:49:52 [STEP] Creating upstream + downstream folder structure
+2026-08-11T15:49:52 [ OK ] Structure ready at /tmp/IoT-Studio/our-velxio
+2026-08-11T15:49:52 [STEP] Ensuring Velxio writable runtime directories
+2026-08-11T15:49:52 [INFO] $ sudo mkdir -p /var/lib/velxio-build
+2026-08-11T15:49:52 [INFO] $ sudo chown -R 1000:1000 /var/lib/velxio-build
+2026-08-11T15:49:52 [INFO] $ chmod -R u+rwX /var/lib/velxio-build
+2026-08-11T15:49:52 [INFO] $ sudo mkdir -p /var/cache/ccache
+2026-08-11T15:49:52 [INFO] $ sudo chown -R 1000:1000 /var/cache/ccache
+2026-08-11T15:49:52 [INFO] $ chmod -R u+rwX /var/cache/ccache
+2026-08-11T15:49:52 [ OK ] Velxio runtime directories are writable
+2026-08-11T15:49:52 [STEP] Installing/checking OS prerequisites as first step
+2026-08-11T15:49:52 [INFO] $ sudo apt-get update
+2026-08-11T15:49:55 [INFO] $ sudo apt-get install -y git curl ca-certificates python3 python3-venv python3-pip python3-full python3-virtualenv python-is-python3 nodejs npm ninja-build pkg-config flex bison cmake ccache libglib2.0-dev libpixman-1-dev libglib2.0-0 libgcrypt20 libslirp0 libpixman-1-0 libfdt1 libusb-1.0-0
+2026-08-11T15:49:55 [STEP] Cloning or updating upstream Velxio
+2026-08-11T15:49:55 [INFO] $ git status --porcelain  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T15:49:55 [WARN] Upstream has local changes. Not pulling. Use --force if intentional.
+2026-08-11T15:49:55 [STEP] Setting backend prerequisites
+2026-08-11T15:49:55 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install --upgrade pip
+2026-08-11T15:49:55 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install -r requirements.txt  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/backend)
+2026-08-11T15:49:55 [ OK ] Backend ready
+2026-08-11T15:49:55 [STEP] Setting frontend prerequisites
+2026-08-11T15:49:55 [INFO] $ npm ci  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/frontend)
+2026-08-11T15:49:59 [STEP] Ensuring frontend generator tools at upstream repo root
+2026-08-11T15:49:59 [INFO] $ npm install --save-dev tsx  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T15:49:59 [ OK ] Frontend generator tool tsx is ready at upstream repo root
+2026-08-11T15:49:59 [ OK ] Frontend ready
+2026-08-11T15:49:59 [STEP] Setting Arduino board cores
+2026-08-11T15:49:59 [STEP] Ensuring arduino-cli
+2026-08-11T15:49:59 [ OK ] arduino-cli already installed
+2026-08-11T15:49:59 [INFO] $ arduino-cli core update-index
+2026-08-11T15:50:05 [INFO] $ arduino-cli core install arduino:avr
+2026-08-11T15:50:05 [INFO] $ arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+2026-08-11T15:50:05 [INFO] $ arduino-cli core update-index
+2026-08-11T15:50:12 [INFO] $ arduino-cli core install rp2040:rp2040
+2026-08-11T15:50:13 [INFO] $ arduino-cli config add board_manager.additional_urls http://drazzy.com/package_drazzy.com_index.json
+2026-08-11T15:50:13 [INFO] $ arduino-cli core update-index
+2026-08-11T15:50:17 [INFO] $ arduino-cli core install ATTinyCore:avr
+2026-08-11T15:50:18 [INFO] $ arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+2026-08-11T15:50:18 [INFO] $ arduino-cli core update-index
+2026-08-11T15:50:23 [INFO] $ arduino-cli core install esp32:esp32@2.0.17
+2026-08-11T15:50:23 [ OK ] Arduino cores ready
+2026-08-11T15:50:23 [STEP] Setting ESP-IDF prerequisites
+2026-08-11T15:50:23 [SKIP] ESP-IDF already cloned
+2026-08-11T15:50:23 [INFO] $ sudo apt-get install -y python3-full python3-virtualenv python-is-python3
+2026-08-11T15:50:24 [INFO] $ /tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf/install.sh esp32,esp32c3  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf)
+2026-08-11T15:50:24 [ OK ] ESP-IDF ready
+2026-08-11T15:50:24 [STEP] Building QEMU native .so files from source using lcgamboa build script
+2026-08-11T15:50:24 [WARN] Removing existing qemu-lcgamboa because it may be on the wrong branch
+2026-08-11T15:50:24 [INFO] $ git clone --depth=1 --branch picsimlab-esp32 https://github.com/lcgamboa/qemu.git /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa
+2026-08-11T15:50:30 [INFO] $ sudo apt-get update
+2026-08-11T15:50:36 [INFO] $ sudo apt-get install -y git ninja-build pkg-config libglib2.0-dev libpixman-1-dev python3 python3-venv python3-pip flex bison
+2026-08-11T15:50:37 [INFO] $ bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa)
+2026-08-11T15:50:50 [FAIL] Command failed with exit code 2: bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh
+2026-08-11T15:52:38 [STEP] Creating upstream + downstream folder structure
+2026-08-11T15:52:38 [ OK ] Structure ready at /tmp/IoT-Studio/our-velxio
+2026-08-11T15:52:38 [STEP] Ensuring Velxio writable runtime directories
+2026-08-11T15:52:38 [INFO] $ sudo mkdir -p /var/lib/velxio-build
+2026-08-11T15:52:38 [INFO] $ sudo chown -R 1000:1000 /var/lib/velxio-build
+2026-08-11T15:52:38 [INFO] $ chmod -R u+rwX /var/lib/velxio-build
+2026-08-11T15:52:38 [INFO] $ sudo mkdir -p /var/cache/ccache
+2026-08-11T15:52:38 [INFO] $ sudo chown -R 1000:1000 /var/cache/ccache
+2026-08-11T15:52:38 [INFO] $ chmod -R u+rwX /var/cache/ccache
+2026-08-11T15:52:38 [ OK ] Velxio runtime directories are writable
+2026-08-11T15:52:38 [STEP] Installing/checking OS prerequisites as first step
+2026-08-11T15:52:38 [INFO] $ sudo apt-get update
+2026-08-11T15:52:39 [INFO] $ sudo apt-get install -y git curl ca-certificates python3 python3-venv python3-pip python3-full python3-virtualenv python-is-python3 nodejs npm ninja-build pkg-config flex bison cmake ccache libglib2.0-dev libpixman-1-dev libglib2.0-0 libgcrypt20 libslirp0 libpixman-1-0 libfdt1 libusb-1.0-0
+2026-08-11T15:52:39 [STEP] Cloning or updating upstream Velxio
+2026-08-11T15:52:39 [INFO] $ git status --porcelain  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T15:52:39 [WARN] Upstream has local changes. Not pulling. Use --force if intentional.
+2026-08-11T15:52:39 [STEP] Setting backend prerequisites
+2026-08-11T15:52:39 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install --upgrade pip
+2026-08-11T15:52:40 [INFO] $ /tmp/IoT-Studio/our-velxio/upstream/velxio/backend/venv/bin/pip install -r requirements.txt  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/backend)
+2026-08-11T15:52:40 [ OK ] Backend ready
+2026-08-11T15:52:40 [STEP] Setting frontend prerequisites
+2026-08-11T15:52:40 [INFO] $ npm ci  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio/frontend)
+2026-08-11T15:52:42 [STEP] Ensuring frontend generator tools at upstream repo root
+2026-08-11T15:52:42 [INFO] $ npm install --save-dev tsx  (cwd=/tmp/IoT-Studio/our-velxio/upstream/velxio)
+2026-08-11T15:52:42 [ OK ] Frontend generator tool tsx is ready at upstream repo root
+2026-08-11T15:52:42 [ OK ] Frontend ready
+2026-08-11T15:52:42 [STEP] Setting Arduino board cores
+2026-08-11T15:52:42 [STEP] Ensuring arduino-cli
+2026-08-11T15:52:42 [ OK ] arduino-cli already installed
+2026-08-11T15:52:42 [INFO] $ arduino-cli core update-index
+2026-08-11T15:52:47 [INFO] $ arduino-cli core install arduino:avr
+2026-08-11T15:52:48 [INFO] $ arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+2026-08-11T15:52:48 [INFO] $ arduino-cli core update-index
+2026-08-11T15:52:53 [INFO] $ arduino-cli core install rp2040:rp2040
+2026-08-11T15:52:54 [INFO] $ arduino-cli config add board_manager.additional_urls http://drazzy.com/package_drazzy.com_index.json
+2026-08-11T15:52:54 [INFO] $ arduino-cli core update-index
+2026-08-11T15:52:58 [INFO] $ arduino-cli core install ATTinyCore:avr
+2026-08-11T15:52:59 [INFO] $ arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+2026-08-11T15:52:59 [INFO] $ arduino-cli core update-index
+2026-08-11T15:53:03 [INFO] $ arduino-cli core install esp32:esp32@2.0.17
+2026-08-11T15:53:04 [ OK ] Arduino cores ready
+2026-08-11T15:53:04 [STEP] Setting ESP-IDF prerequisites
+2026-08-11T15:53:04 [SKIP] ESP-IDF already cloned
+2026-08-11T15:53:04 [INFO] $ sudo apt-get install -y python3-full python3-virtualenv python-is-python3
+2026-08-11T15:53:04 [INFO] $ /tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf/install.sh esp32,esp32c3  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/esp-idf)
+2026-08-11T15:53:05 [ OK ] ESP-IDF ready
+2026-08-11T15:53:05 [STEP] Building QEMU native .so files from source using lcgamboa build script
+2026-08-11T15:53:05 [WARN] Removing existing qemu-lcgamboa because it may be on the wrong branch
+2026-08-11T15:53:05 [INFO] $ git clone --depth=1 --branch picsimlab-esp32 https://github.com/lcgamboa/qemu.git /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa
+2026-08-11T15:53:10 [INFO] $ sudo apt-get update
+2026-08-11T15:53:12 [INFO] $ sudo apt-get install -y git ninja-build pkg-config libglib2.0-dev libpixman-1-dev python3 python3-venv python3-pip flex bison
+2026-08-11T15:53:12 [INFO] $ bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh  (cwd=/tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa)
+2026-08-11T15:53:26 [FAIL] Command failed with exit code 2: bash /tmp/IoT-Studio/our-velxio/downstream/cache/qemu-lcgamboa/build_libqemu-esp32.sh
