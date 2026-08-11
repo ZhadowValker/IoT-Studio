@@ -308,6 +308,44 @@ def setup_qemu_prebuilt():
         if dest.exists(): LOG.skip(f"{rom} already exists"); continue
         download(f"{QEMU_RELEASE_BASE}/{rom}",dest)
     write_qemu_env(); LOG.ok("QEMU native files ready")
+
+def setup_qemu_prebuilt_local():
+    """Copy QEMU .so and ROM files from local prebuilt/ folder instead of downloading or building."""
+    LOG.step("Using prebuilt QEMU libraries from prebuilt/ folder")
+    
+    prebuilt_dir = Path(__file__).parent / "prebuilt"
+    
+    if not prebuilt_dir.exists():
+        raise BuildError(f"prebuilt/ folder not found at {prebuilt_dir}")
+    
+    # Copy QEMU libraries
+    for lib in ["libqemu-xtensa.so", "libqemu-riscv32.so"]:
+        src = prebuilt_dir / lib
+        dest = LIB_DIR / lib
+        if dest.exists():
+            LOG.skip(f"{lib} already exists in lib/")
+            continue
+        if not src.exists():
+            raise BuildError(f"Prebuilt {lib} not found in prebuilt/ folder")
+        shutil.copy2(src, dest)
+        LOG.ok(f"Copied {lib} to lib/")
+    
+    # Copy ROM files
+    for rom in ["esp32-v3-rom.bin", "esp32-v3-rom-app.bin", "esp32c3-rom.bin", "esp32s3_rev0_rom.bin"]:
+        src = prebuilt_dir / rom
+        dest = LIB_DIR / rom
+        if dest.exists():
+            LOG.skip(f"{rom} already exists in lib/")
+            continue
+        if not src.exists():
+            LOG.warn(f"Prebuilt {rom} not found in prebuilt/ folder")
+            continue
+        shutil.copy2(src, dest)
+        LOG.ok(f"Copied {rom} to lib/")
+    
+    write_qemu_env()
+    LOG.ok("Prebuilt QEMU files ready")
+
 def install_qemu_build_deps():
     if os_name()=="linux" and which("apt-get"):
         run(["sudo","apt-get","update"],check=False); run(["sudo","apt-get","install","-y","git","ninja-build","pkg-config","libglib2.0-dev","libpixman-1-dev","python3","python3-venv","python3-pip","flex","bison"],check=False)
