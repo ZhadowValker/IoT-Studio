@@ -6,7 +6,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/davidmonterocrespo24/velxio.git"
-QEMU_RELEASE_URL="https://github.com/ZhadowValker/IoT-Studio/releases/download/qemu-prebuilt-v1"
+QEMU_RELEASE_URL="https://github.com/ZhadowValker/IoT-Studio/releases/download/qemu-prebuilt-v2"
 CLONE_DIR="velxio"
 
 echo "==> Cloning Velxio..."
