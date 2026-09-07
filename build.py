@@ -1,26 +1,19 @@
 #!/usr/bin/env python3
 """
-Velxio OSS developer build orchestrator.
+IoT-Studio -> Velxio OSS developer bootstrap.
 
-One-command developer setup/build flow:
-    python3 build.py setup
-    python3 build.py start
-    python3 build.py rebuild
-    python3 build.py doctor
-    python3 build.py status
-    python3 build.py restart
-    python3 build.py stop
-    python3 build.py qemu
-    python3 build.py clean
+Developer flow:
+    git clone https://github.com/ZhadowValker/IoT-Studio.git
+    cd IoT-Studio
+    python3 build.py
 
-This script intentionally does NOT:
-- require GitHub CLI or a GitHub token
-- change the developer's Git identity/configuration
-- reset or discard Velxio source changes
-- install or enable Velxio Pro
-- download QEMU from velxio.dev
+IoT-Studio is the developer entry point.
+The script obtains the public Velxio OSS source, supplies the QEMU
+prebuilt assets from this repository, builds the strict OSS Docker image,
+starts it, and verifies the health endpoint.
 
-IoT-Studio is used only as the public QEMU asset provider.
+No GitHub CLI, GitHub token, Git identity, Pro license, or Pro download
+is required.
 """
 
 from __future__ import annotations
@@ -35,14 +28,17 @@ import urllib.request
 from pathlib import Path
 
 
-SCRIPT_VERSION = "1.0.0-oss-one-command"
+VERSION = "2.0.0-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
-IOT_STUDIO_REPO = "https://github.com/ZhadowValker/IoT-Studio.git"
+VELXIO_BRANCH = "oss"
+
+VELXIO_DIR = Path("our-velxio") / "upstream"
+QEMU_SOURCE_DIR = Path("prebuilt")
+QEMU_TARGET_DIR = VELXIO_DIR / "prebuilt" / "qemu"
 
 COMPOSE_FILE = "docker-compose.oss.yml"
 COMPOSE_PROJECT = "velxio-oss"
-CONTAINER_NAME = "velxio-oss"
 HEALTH_URL = "http://localhost:3080/health"
 
 QEMU_FILES = (
@@ -61,260 +57,212 @@ REQUIRED_VELXIO_FILES = (
     "frontend/scripts/build-oss.mjs",
 )
 
-# Keep provider tooling outside the Velxio repository so it cannot pollute
-# the developer's source tree or accidentally become part of a commit.
-DEFAULT_PROVIDER_DIR = Path.home() / ".cache" / "velxio" / "IoT-Studio"
-
 
 class BuildError(RuntimeError):
     pass
 
 
-def color(text: str, code: str) -> str:
-    if not sys.stdout.isatty():
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def info(message: str) -> None:
-    print(f"{color('INFO', '36')}: {message}")
-
-
-def ok(message: str) -> None:
-    print(f"{color(' OK ', '32')}: {message}")
-
-
-def warn(message: str) -> None:
-    print(f"{color('WARN', '33')}: {message}")
-
-
-def fail(message: str) -> None:
-    print(f"{color('FAIL', '31')}: {message}")
-
-
-def run(
-    args: list[str],
-    *,
-    cwd: Path | None = None,
-    check: bool = True,
-    capture: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    info("$ " + " ".join(args))
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        check=check,
-        text=True,
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
-    )
-
-
-def command_exists(name: str) -> bool:
-    return shutil.which(name) is not None
-
-
-def repo_root() -> Path:
+def root() -> Path:
     return Path(__file__).resolve().parent
 
 
-def provider_dir() -> Path:
-    override = os.environ.get("VELXIO_IOT_STUDIO_DIR")
-    return Path(override).expanduser().resolve() if override else DEFAULT_PROVIDER_DIR
+def log(message: str) -> None:
+    print(f"INFO: {message}")
 
 
-def require_repo_root() -> None:
-    root = repo_root()
-    if not (root / ".git").exists():
-        raise BuildError("build.py must be run from the Velxio Git repository root.")
+def success(message: str) -> None:
+    print(f" OK : {message}")
 
 
-def git_branch(root: Path) -> str:
-    result = run(
-        ["git", "branch", "--show-current"],
-        cwd=root,
-        capture=True,
+def warning(message: str) -> None:
+    print(f"WARN: {message}")
+
+
+def error(message: str) -> None:
+    print(f"FAIL: {message}")
+
+
+def run(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    log("$ " + " ".join(command))
+    return subprocess.run(
+        command,
+        cwd=str(cwd) if cwd else None,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.STDOUT if capture else None,
+        check=check,
     )
-    return result.stdout.strip()
 
 
-def verify_oss_tree(root: Path) -> None:
-    missing = [path for path in REQUIRED_VELXIO_FILES if not (root / path).is_file()]
+def exists(command: str) -> bool:
+    return shutil.which(command) is not None
+
+
+def check_host() -> None:
+    missing = [
+        command for command in ("git", "docker", "python3", "curl")
+        if not exists(command)
+    ]
     if missing:
-        raise BuildError(
-            "This checkout does not contain the expected strict OSS build files:\n"
-            + "\n".join(f"  - {p}" for p in missing)
-        )
+        raise BuildError("Missing required commands: " + ", ".join(missing))
 
-    branch = git_branch(root)
-    if branch != "oss":
-        raise BuildError(
-            f"Current branch is '{branch or '(detached HEAD)'}'. "
-            "The strict OSS build must be run from the 'oss' branch."
-        )
-
-    ok("Velxio OSS checkout verified")
-
-
-def check_prerequisites() -> None:
-    required = ["git", "docker", "curl", "python3"]
-    missing = [name for name in required if not command_exists(name)]
-    if missing:
-        raise BuildError(
-            "Missing required host commands: " + ", ".join(missing)
-        )
-
-    result = run(
-        ["docker", "info"],
-        check=False,
-        capture=True,
-    )
+    result = run(["docker", "info"], capture=True, check=False)
     if result.returncode != 0:
         raise BuildError(
-            "Docker is installed but the Docker daemon is not reachable.\n"
-            "Start Docker Desktop (or your Docker daemon) and run this command again."
+            "Docker is installed but the Docker daemon is not available. "
+            "Start Docker Desktop/Docker Engine and try again."
         )
 
-    result = run(
-        ["docker", "compose", "version"],
-        check=False,
-        capture=True,
-    )
+    result = run(["docker", "compose", "version"], capture=True, check=False)
     if result.returncode != 0:
-        raise BuildError("Docker Compose v2 is required: 'docker compose' was not found.")
+        raise BuildError("Docker Compose v2 is required.")
 
-    ok("Host prerequisites verified")
-
-
-def clone_or_update_provider(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    if not (path / ".git").is_dir():
-        info(f"Cloning public IoT-Studio provider into {path}")
-        run(["git", "clone", "--depth", "1", IOT_STUDIO_REPO, str(path)])
-        ok("IoT-Studio provider cloned")
-        return
-
-    # Never overwrite a developer's local provider changes.
-    status = run(
-        ["git", "status", "--porcelain"],
-        cwd=path,
-        capture=True,
-    ).stdout.strip()
-
-    if status:
-        warn(
-            "IoT-Studio provider has local changes; leaving it untouched. "
-            "The existing prebuilt assets will be used."
-        )
-        return
-
-    info("Refreshing IoT-Studio provider")
-    run(["git", "fetch", "--depth", "1", "origin", "main"], cwd=path)
-
-    current = run(
-        ["git", "branch", "--show-current"],
-        cwd=path,
-        capture=True,
-    ).stdout.strip()
-
-    if current != "main":
-        run(["git", "switch", "main"], cwd=path)
-
-    run(["git", "reset", "--hard", "origin/main"], cwd=path)
-    ok("IoT-Studio provider refreshed")
+    success("Host prerequisites verified")
 
 
-def validate_qemu_file(path: Path) -> bool:
-    if not path.is_file():
-        return False
-
-    try:
-        size = path.stat().st_size
-    except OSError:
-        return False
-
-    if size < 1024:
-        return False
-
-    if path.suffix == ".so":
-        try:
-            with path.open("rb") as handle:
-                magic = handle.read(4)
-            return magic == b"\x7fELF"
-        except OSError:
-            return False
-
-    return True
-
-
-def sync_qemu_assets(root: Path, provider: Path) -> None:
-    source_dir = provider / "prebuilt"
-    target_dir = root / "prebuilt" / "qemu"
-    target_dir.mkdir(parents=True, exist_ok=True)
-
+def validate_provider_assets() -> None:
     missing = []
-    copied = []
+    invalid = []
 
-    for filename in QEMU_FILES:
-        source = source_dir / filename
-        target = target_dir / filename
+    for name in QEMU_FILES:
+        path = root() / QEMU_SOURCE_DIR / name
 
-        if not validate_qemu_file(source):
-            missing.append(filename)
+        if not path.is_file():
+            missing.append(name)
             continue
 
-        # Copy only when missing or different. This makes repeated setup fast
-        # and avoids unnecessary writes.
-        should_copy = not target.exists()
-        if not should_copy:
-            try:
-                should_copy = (
-                    source.stat().st_size != target.stat().st_size
-                    or source.stat().st_mtime_ns > target.stat().st_mtime_ns
-                )
-            except OSError:
-                should_copy = True
+        if path.stat().st_size < 1024:
+            invalid.append(name)
+            continue
 
-        if should_copy:
-            shutil.copy2(source, target)
-            copied.append(filename)
+        if path.suffix == ".so":
+            with path.open("rb") as handle:
+                if handle.read(4) != b"\x7fELF":
+                    invalid.append(name)
 
     if missing:
         raise BuildError(
-            "IoT-Studio does not contain all required QEMU assets in "
-            f"{source_dir}:\n"
+            "IoT-Studio prebuilt directory is missing:\n"
             + "\n".join(f"  - {name}" for name in missing)
         )
 
-    if copied:
-        ok("QEMU assets synchronized: " + ", ".join(copied))
-    else:
-        ok("QEMU assets already present and valid")
-
-    # Final target-side validation.
-    invalid = [
-        name
-        for name in QEMU_FILES
-        if not validate_qemu_file(target_dir / name)
-    ]
     if invalid:
         raise BuildError(
-            "QEMU assets failed final validation:\n"
+            "Invalid QEMU prebuilt asset(s):\n"
             + "\n".join(f"  - {name}" for name in invalid)
         )
 
+    success("IoT-Studio QEMU assets verified")
 
-def compose(root: Path, args: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
+
+def sync_qemu() -> None:
+    source = root() / QEMU_SOURCE_DIR
+    target = root() / QEMU_TARGET_DIR
+    target.mkdir(parents=True, exist_ok=True)
+
+    for name in QEMU_FILES:
+        shutil.copy2(source / name, target / name)
+
+    success(f"QEMU assets copied to {target}")
+
+
+def clone_velxio() -> None:
+    destination = root() / VELXIO_DIR
+
+    if (destination / ".git").is_dir():
+        branch = run(
+            ["git", "branch", "--show-current"],
+            cwd=destination,
+            capture=True,
+        ).stdout.strip()
+
+        if branch != VELXIO_BRANCH:
+            raise BuildError(
+                f"Existing Velxio checkout is on '{branch or 'detached HEAD'}', "
+                f"expected '{VELXIO_BRANCH}'."
+            )
+
+        success("Existing Velxio OSS checkout found")
+        return
+
+    if destination.exists() and any(destination.iterdir()):
+        raise BuildError(
+            f"{destination} exists but is not a valid Velxio Git checkout. "
+            "Move it aside and run setup again."
+        )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    log(f"Cloning Velxio OSS branch into {destination}")
+    run(
+        [
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            VELXIO_BRANCH,
+            VELXIO_REPO,
+            str(destination),
+        ]
+    )
+
+    success("Velxio OSS source cloned")
+
+
+def verify_velxio() -> None:
+    destination = root() / VELXIO_DIR
+
+    missing = [
+        path for path in REQUIRED_VELXIO_FILES
+        if not (destination / path).is_file()
+    ]
+
+    if missing:
+        raise BuildError(
+            "Velxio OSS checkout is incomplete. Missing:\n"
+            + "\n".join(f"  - {name}" for name in missing)
+        )
+
+    branch = run(
+        ["git", "branch", "--show-current"],
+        cwd=destination,
+        capture=True,
+    ).stdout.strip()
+
+    if branch != VELXIO_BRANCH:
+        raise BuildError(
+            f"Velxio checkout is on '{branch}', expected '{VELXIO_BRANCH}'."
+        )
+
+    success("Velxio OSS checkout verified")
+
+
+def compose(args: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
     return run(
-        ["docker", "compose", "-f", COMPOSE_FILE, "-p", COMPOSE_PROJECT, *args],
-        cwd=root,
+        [
+            "docker",
+            "compose",
+            "-f",
+            COMPOSE_FILE,
+            "-p",
+            COMPOSE_PROJECT,
+            *args,
+        ],
+        cwd=root() / VELXIO_DIR,
         capture=capture,
     )
 
 
 def wait_for_health(timeout: int = 180) -> bool:
     deadline = time.time() + timeout
+
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(HEALTH_URL, timeout=3) as response:
@@ -322,181 +270,214 @@ def wait_for_health(timeout: int = 180) -> bool:
                     return True
         except Exception:
             pass
+
         time.sleep(2)
+
     return False
 
 
-def health_check() -> None:
-    info(f"Checking {HEALTH_URL}")
+def health() -> None:
+    log(f"Checking {HEALTH_URL}")
+
     if wait_for_health():
-        ok("Velxio OSS is healthy")
+        success("Velxio OSS is healthy")
         return
 
     raise BuildError(
-        f"Velxio did not become healthy within the timeout. "
-        f"Check: docker compose -f {COMPOSE_FILE} logs"
+        "Velxio OSS did not become healthy within 180 seconds. "
+        "Run: python3 build.py logs"
     )
 
 
-def build_image(root: Path, no_cache: bool = False) -> None:
-    sync_provider_and_qemu(root)
-    args = ["build"]
-    if no_cache:
-        args.append("--no-cache")
-    compose(root, args)
-    ok("Velxio OSS image built")
+def setup() -> None:
+    log(f"IoT-Studio developer bootstrap {VERSION}")
 
+    check_host()
+    validate_provider_assets()
+    clone_velxio()
+    verify_velxio()
+    sync_qemu()
 
-def start_service(root: Path, *, build: bool = False) -> None:
-    if build:
-        build_image(root)
-    compose(root, ["up", "-d"])
-    health_check()
+    compose(["build"])
+    success("Velxio OSS image built")
 
+    compose(["up", "-d"])
+    health()
 
-def sync_provider_and_qemu(root: Path) -> None:
-    provider = provider_dir()
-    clone_or_update_provider(provider)
-    sync_qemu_assets(root, provider)
-
-
-def setup(root: Path) -> None:
-    info(f"Velxio OSS developer setup {SCRIPT_VERSION}")
-    check_prerequisites()
-    verify_oss_tree(root)
-    sync_provider_and_qemu(root)
-    compose(root, ["build"])
-    compose(root, ["up", "-d"])
-    health_check()
     print()
-    ok("Developer setup complete")
+    success("Developer setup complete")
     print("Open: http://localhost:3080")
 
 
-def qemu(root: Path) -> None:
-    verify_oss_tree(root)
-    check_prerequisites()
-    sync_provider_and_qemu(root)
+def build(no_cache: bool = False) -> None:
+    check_host()
+    clone_velxio()
+    verify_velxio()
+    validate_provider_assets()
+    sync_qemu()
+
+    command = ["build"]
+    if no_cache:
+        command.append("--no-cache")
+
+    compose(command)
+    success("Velxio OSS image built")
 
 
-def rebuild(root: Path, no_cache: bool = False) -> None:
-    check_prerequisites()
-    verify_oss_tree(root)
-    build_image(root, no_cache=no_cache)
-    compose(root, ["up", "-d"])
-    health_check()
+def rebuild(no_cache: bool = False) -> None:
+    build(no_cache=no_cache)
+    compose(["up", "-d"])
+    health()
 
 
-def start(root: Path) -> None:
-    check_prerequisites()
-    verify_oss_tree(root)
-    # If QEMU assets are missing, repair them automatically.
-    sync_provider_and_qemu(root)
-    compose(root, ["up", "-d"])
-    health_check()
+def start() -> None:
+    check_host()
+    clone_velxio()
+    verify_velxio()
+    validate_provider_assets()
+    sync_qemu()
+
+    compose(["up", "-d"])
+    health()
 
 
-def restart(root: Path) -> None:
-    check_prerequisites()
-    verify_oss_tree(root)
-    compose(root, ["restart"])
-    health_check()
+def stop() -> None:
+    check_host()
+    compose(["stop"])
+    success("Velxio OSS stopped")
 
 
-def stop(root: Path) -> None:
-    check_prerequisites()
-    compose(root, ["stop"])
-    ok("Velxio OSS stopped")
+def restart() -> None:
+    check_host()
+    compose(["restart"])
+    health()
 
 
-def status(root: Path) -> None:
-    check_prerequisites()
-    compose(root, ["ps"])
+def status() -> None:
+    check_host()
+    compose(["ps"])
 
 
-def doctor(root: Path) -> int:
-    print(f"Velxio OSS doctor {SCRIPT_VERSION}")
+def logs() -> None:
+    check_host()
+    compose(["logs", "--tail", "200"])
+
+
+def qemu() -> None:
+    validate_provider_assets()
+
+    if not (root() / VELXIO_DIR / ".git").is_dir():
+        clone_velxio()
+
+    verify_velxio()
+    sync_qemu()
+
+
+def doctor() -> int:
+    print(f"IoT-Studio / Velxio OSS doctor {VERSION}")
     print()
 
     failures = 0
 
-    def test(label: str, fn) -> None:
+    def test(name: str, function) -> None:
         nonlocal failures
+
         try:
-            fn()
-            ok(label)
+            function()
+            success(name)
         except Exception as exc:
             failures += 1
-            fail(f"{label}: {exc}")
+            error(f"{name}: {exc}")
 
-    test("Repository root", lambda: require_repo_root())
-    test("OSS branch", lambda: verify_oss_tree(root))
-    test("Host prerequisites", check_prerequisites)
-    test("QEMU provider/assets", lambda: sync_provider_and_qemu(root))
+    test("Host prerequisites", check_host)
+    test("IoT-Studio QEMU assets", validate_provider_assets)
+    test("Velxio OSS checkout", lambda: (clone_velxio(), verify_velxio()))
+    test("QEMU synchronization", sync_qemu)
 
     def compose_config() -> None:
-        result = compose(root, ["config"], capture=True)
+        result = compose(["config"], capture=True, check=False)
         if result.returncode != 0:
-            raise BuildError("docker compose configuration is invalid")
+            raise BuildError("Docker Compose configuration is invalid.")
 
     test("Docker Compose configuration", compose_config)
 
-    def health() -> None:
+    def health_check() -> None:
         with urllib.request.urlopen(HEALTH_URL, timeout=3) as response:
-            if response.status < 200 or response.status >= 300:
+            if not 200 <= response.status < 300:
                 raise BuildError(f"HTTP {response.status}")
 
-    test("Running health endpoint", health)
+    test("Velxio health endpoint", health_check)
 
     print()
+
     if failures:
-        fail(f"Doctor found {failures} problem(s)")
+        error(f"Doctor found {failures} problem(s)")
         return 1
 
-    ok("Doctor found no problems")
+    success("Doctor found no problems")
     return 0
 
 
-def clean(root: Path, volumes: bool = False) -> None:
-    check_prerequisites()
-    args = ["down", "--remove-orphans"]
+def clean(volumes: bool = False) -> None:
+    check_host()
+
+    command = ["down", "--remove-orphans"]
     if volumes:
-        warn("Removing project volumes: velxio-oss-build and velxio-oss-ccache")
-        args.append("--volumes")
-    compose(root, args)
-    ok("Velxio OSS project resources cleaned")
+        warning(
+            "Removing only the Velxio OSS project's named Docker volumes."
+        )
+        command.append("--volumes")
+
+    compose(command)
+    success("Velxio OSS Docker resources cleaned")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="One-command developer setup/build tool for Velxio OSS."
+        description="One-command IoT-Studio developer setup for Velxio OSS."
     )
+
     parser.add_argument(
         "--version",
         action="version",
-        version=SCRIPT_VERSION,
+        version=VERSION,
     )
 
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("setup", help="Set up provider, QEMU assets, build and start OSS.")
-    sub.add_parser("qemu", help="Sync QEMU assets from IoT-Studio.")
-    sub.add_parser("start", help="Start the OSS container and verify health.")
-    sub.add_parser("restart", help="Restart the OSS container and verify health.")
-    sub.add_parser("stop", help="Stop the OSS container.")
-    sub.add_parser("status", help="Show Docker Compose status.")
-    sub.add_parser("doctor", help="Validate developer environment and OSS runtime.")
+    sub.add_parser(
+        "setup",
+        help="Full developer setup: Velxio + QEMU + Docker + start.",
+    )
+    sub.add_parser("build", help="Build the Velxio OSS Docker image.")
+    sub.add_parser("start", help="Start Velxio OSS.")
+    sub.add_parser("stop", help="Stop Velxio OSS.")
+    sub.add_parser("restart", help="Restart Velxio OSS.")
+    sub.add_parser("status", help="Show Velxio Docker status.")
+    sub.add_parser("logs", help="Show the latest Velxio container logs.")
+    sub.add_parser("qemu", help="Synchronize IoT-Studio QEMU assets.")
+    sub.add_parser("doctor", help="Diagnose the developer environment.")
 
-    rebuild_parser = sub.add_parser("rebuild", help="Build the OSS image and restart it.")
+    rebuild_parser = sub.add_parser(
+        "rebuild",
+        help="Rebuild the OSS image and restart it.",
+    )
     rebuild_parser.add_argument(
         "--no-cache",
         action="store_true",
-        help="Force a completely fresh Docker build.",
+        help="Perform a clean Docker build without cache.",
+    )
+
+    build_parser = sub.choices["build"]
+    build_parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Perform a clean Docker build without cache.",
     )
 
     clean_parser = sub.add_parser(
         "clean",
-        help="Remove this project's containers/networks (not global Docker resources).",
+        help="Remove this project's Docker resources only.",
     )
     clean_parser.add_argument(
         "--volumes",
@@ -510,42 +491,45 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     command = args.command or "setup"
-    root = repo_root()
 
     try:
-        require_repo_root()
-
         if command == "setup":
-            setup(root)
-        elif command == "qemu":
-            qemu(root)
-        elif command == "start":
-            start(root)
-        elif command == "restart":
-            restart(root)
-        elif command == "stop":
-            stop(root)
-        elif command == "status":
-            status(root)
-        elif command == "doctor":
-            return doctor(root)
+            setup()
+        elif command == "build":
+            build(no_cache=args.no_cache)
         elif command == "rebuild":
-            rebuild(root, no_cache=args.no_cache)
+            rebuild(no_cache=args.no_cache)
+        elif command == "start":
+            start()
+        elif command == "stop":
+            stop()
+        elif command == "restart":
+            restart()
+        elif command == "status":
+            status()
+        elif command == "logs":
+            logs()
+        elif command == "qemu":
+            qemu()
+        elif command == "doctor":
+            return doctor()
         elif command == "clean":
-            clean(root, volumes=args.volumes)
+            clean(volumes=args.volumes)
         else:
             raise BuildError(f"Unknown command: {command}")
 
         return 0
 
     except KeyboardInterrupt:
-        warn("Interrupted")
+        warning("Interrupted")
         return 130
+
     except BuildError as exc:
-        fail(str(exc))
+        error(str(exc))
         return 1
+
     except subprocess.CalledProcessError as exc:
-        fail(f"Command failed with exit code {exc.returncode}")
+        error(f"Command failed with exit code {exc.returncode}")
         return exc.returncode or 1
 
 
