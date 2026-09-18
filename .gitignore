@@ -4,3 +4,4 @@ our-velxio/
 
 # Local asset caches
 qemu-prebuilt-*.tar.gz
+__pycache__/
