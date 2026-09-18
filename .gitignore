@@ -1,0 +1,6 @@
+# Runtime state — never commit
+our-velxio/
+*.log
+
+# Local asset caches
+qemu-prebuilt-*.tar.gz
