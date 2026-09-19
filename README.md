@@ -1,470 +1,330 @@
-# Velxio Local Full Profile Build
+# IoT-Studio — Velxio OSS Developer Bootstrap
 
-This repository contains the downstream automation script for building and running a local Velxio development environment without Docker.
+One-command local setup for [Velxio OSS](https://github.com/ZhadowValker/velxio) —
+a fully local, browser-based Arduino and ESP32 simulator with **real QEMU emulation**.
 
-## Purpose
+```bash
+git clone https://github.com/ZhadowValker/IoT-Studio.git
+cd IoT-Studio
+python3 build.py
+```
 
-The current `build.py` is designed to bootstrap the **full profile** for Velxio local development.
+That single command:
 
-The full profile includes:
+1. validates your host (git, docker, python3, curl, Docker daemon, Compose v2)
+2. validates the QEMU emulation assets in `prebuilt/` (see [below](#the-prebuilt-binaries))
+3. shallow-clones the Velxio OSS source (`ZhadowValker/velxio`, branch `oss`) into `our-velxio/upstream/`
+4. copies the QEMU assets into the source tree
+5. builds the strict OSS Docker image (Debian 13 · nginx + FastAPI · ESP-IDF v5)
+6. starts the container and waits for the health endpoint
+7. prints a build summary (image, container, volumes) and the app URL
+
+When it finishes, the app is at **http://localhost:3080** — open it, pick a board,
+write a sketch, click Run. ESP32 sketches compile with the real ESP-IDF toolchain
+and boot on a real QEMU emulator inside the container.
+
+No GitHub CLI, no GitHub token, no Git identity, no Pro license, no manual
+downloads are required.
+
+---
+
+## Contents
+
+- [Requirements](#requirements)
+- [Commands](#commands)
+- [What the setup does](#what-the-setup-does)
+- [The prebuilt binaries](#the-prebuilt-binaries)
+- [QEMU binary compatibility (glibc)](#qemu-binary-compatibility-glibc)
+- [Folder structure](#folder-structure)
+- [Version history](#version-history)
+- [Troubleshooting](#troubleshooting)
+- [Uninstall](#uninstall)
+
+---
+
+## Requirements
+
+| Requirement | Notes |
+|---|---|
+| Linux x86-64 (or WSL2) | the QEMU binaries are `linux/amd64` only |
+| `git`, `python3`, `curl` | any recent version |
+| Docker Engine | daemon running (`docker info` must succeed) |
+| Docker Compose v2 | `docker compose version` (the plugin, not the old `docker-compose` binary) |
+
+Disk: the built image is ~5 GB. RAM: 4 GB+ recommended.
+First build on a virgin machine takes **~8–9 minutes** (dominated by the ESP-IDF
+v5 clone and toolchain downloads). Subsequent rebuilds are ~1–2 min thanks to
+Docker layer cache.
+
+---
+
+## Commands
+
+All commands run from the repo root. `python3 build.py` with no arguments is
+the same as `setup`.
+
+| Command | What it does |
+|---|---|
+| `python3 build.py setup` | Full flow: validate → clone → build → start → health check → summary |
+| `python3 build.py build` | Build (or rebuild) the Docker image only |
+| `python3 build.py build --no-cache` | Build with no Docker cache (fully clean) |
+| `python3 build.py rebuild [--no-cache]` | Build + restart + health check + summary |
+| `python3 build.py start` | Start the stack (clones/validates if needed, no image rebuild) |
+| `python3 build.py stop` | Stop the container |
+| `python3 build.py restart` | Restart the container + health check |
+| `python3 build.py status` | Docker Compose `ps` table |
+| `python3 build.py summary` | Print the image, container and volumes summary on demand |
+| `python3 build.py logs` | Last 200 container log lines |
+| `python3 build.py qemu` | Re-validate + re-sync QEMU assets only |
+| `python3 build.py doctor` | Diagnose the environment (7 checks) |
+| `python3 build.py clean [--volumes]` | Remove this project's Docker resources (containers, networks). `--volumes` also removes the named build/ccache volumes |
+
+Everything is idempotent — re-running `setup` or `start` on an existing
+installation is safe and fast.
+
+---
+
+## What the setup does
 
 ```text
-browser profile
-+ ESP32
-+ ESP32-C3
-+ ESP-IDF
-+ native QEMU .so libraries
+IoT-Studio (this repo)                our-velxio/upstream  (generated)
+├── build.py                         ├── backend/            (FastAPI)
+├── prebuilt/          ── copy ──►  ├── frontend/           (React + Vite)
+│   └── QEMU assets                  ├── Dockerfile.oss
+└── README.md                        ├── docker-compose.oss.yml
+                                     └── prebuilt/qemu/      (copied assets)
+                                          │
+                              docker compose build (context: this tree)
+                                          │
+                                          ▼
+                            image: velxio-oss-velxio-oss (~5 GB)
+                                   container: velxio-oss
+                                   http://localhost:3080
 ```
 
-In practical terms, this means the script sets up:
+- The Velxio **source** is never committed here — it is shallow-cloned from
+  `ZhadowValker/velxio` branch `oss` on first run and verified against a file
+  contract (`Dockerfile.oss`, `docker-compose.oss.yml`, `vite.oss.config.ts`,
+  `build-oss.mjs`).
+- The `oss` branch ships **without binaries**. This repository is the binary
+  provider: the QEMU libraries and ROMs in `prebuilt/` get copied into the
+  cloned tree and baked into the Docker image at `/app/lib/`.
+- The image build is "strict OSS": no Pro overlay, no license key, no telemetry.
+- Two named volumes (`velxio-oss-build`, `velxio-oss-ccache`) persist ESP-IDF
+  build state and compiler cache across restarts. The **first** ESP32 compile
+  takes ~60 s (cold volume); after that, compiles are ~2 s.
 
-- Velxio upstream source clone
-- Backend Python virtual environment
-- Frontend Node/Vite development environment
-- Arduino CLI
-- AVR board support
-- RP2040 board support
-- ESP32 Arduino core 2.0.17
-- ESP-IDF v4.4.7
-- Native QEMU libraries
-  - `libqemu-xtensa.so`
-  - `libqemu-riscv32.so`
-- ESP32 ROM blobs
-  - `esp32-v3-rom.bin`
-  - `esp32-v3-rom-app.bin`
-  - `esp32c3-rom.bin`
-- Writable ESP-IDF build cache under `/var/lib/velxio-build`
-- Writable ccache directory under `/var/cache/ccache`
-- Frontend startup fix for `npx tsx` prompt
-- ESP-IDF exported runtime environment for backend compilation
+---
 
-## Folder Structure
+## The prebuilt binaries
 
-The script creates and uses the following structure:
+`prebuilt/` contains the six files that make ESP32-family emulation real.
+Two kinds:
+
+### QEMU emulator libraries (the `.so` files)
+
+Compiled from the [lcgamboa QEMU fork](https://github.com/lcgamboa/qemu)
+(`picsimlab-esp32` branch) as **shared libraries** instead of executables. The
+backend loads them from Python with `ctypes` — one library instance per
+simulation, so multiple boards can run in parallel without shared-state
+conflicts.
+
+| File | Emulates | Boards |
+|---|---|---|
+| `libqemu-xtensa.so` (~45 MB) | Xtensa LX6/LX7 cores | ESP32, ESP32-S3, ESP32-S2 |
+| `libqemu-riscv32.so` (~42 MB) | RISC-V cores | ESP32-C3, ESP32-C6 |
+
+These provide real instruction-level emulation — GPIO, UART, timers, ADC,
+PWM/LEDC, I2C/SPI, WiFi radio modeling — not a JavaScript approximation.
+
+### ESP32 ROM images (the `.bin` files)
+
+Real hardware boots from factory-masked ROM code before it ever touches your
+sketch; QEMU needs the same ROMs to boot the same way:
+
+| File | Purpose |
+|---|---|
+| `esp32-v3-rom.bin` | ESP32 (v3 silicon) ROM — bootloader handoff, flash read |
+| `esp32-v3-rom-app.bin` | ESP32 ROM app image — direct-app boot path |
+| `esp32c3-rom.bin` | ESP32-C3 ROM |
+| `esp32s3_rev0_rom.bin` | ESP32-S3 (rev0) ROM |
+
+### Where they come from / alternatives
+
+The known-good binaries are also published as a GitHub Release —
+[`qemu-prebuilt-v3`](https://github.com/ZhadowValker/IoT-Studio/releases/tag/qemu-prebuilt-v3) —
+with full dependency documentation. If `prebuilt/` is missing or contains
+invalid/incompatible binaries, `build.py` **automatically downloads the
+release bundle** and re-validates. To build your own set instead, compile the
+fork in a `debian:12` container (see the release notes for the rule).
+
+---
+
+## QEMU binary compatibility (glibc)
+
+This bit us once, so it is enforced now — read this if you replace the binaries.
+
+The Docker runtime stage is **Debian 13 (glibc 2.41)**. A glibc-linked binary
+only runs on glibc **equal to or newer than** what it was linked against —
+never older. The distributed set is linked against **glibc 2.34**, so it runs
+on Debian 11/12/13 and Ubuntu 20.04–24.04.
+
+`build.py` scans every `.so` for `GLIBC_x.y` requirements and **rejects
+anything needing newer than 2.41** with an actionable error — before any
+Docker build — instead of letting the ESP32 worker crash at first Run with
+the cryptic `worker exited unexpectedly (code 1)`.
+
+Runtime dependencies of the libraries (satisfied by the base image; needed if
+you use them outside Docker): `libfdt1`, `libgcrypt20`, `zlib1g`.
+Build toolchain of the distributed set: **GCC 11.4.0** (Ubuntu 22.04).
+
+---
+
+## Folder structure
+
+After a successful setup:
 
 ```text
-project-root/
-  build.py
-  our-velxio/
-    upstream/
-      velxio/
-        backend/
-        frontend/
-        scripts/
-        test/
-    downstream/
-      config/
-        espidf.env
-        qemu.env
-        bootimages.env
-      cache/
-        esp-idf/
-        arduino-esp32/
-        qemu-lcgamboa/
-        boot-images/
-      lib/
-        libqemu-xtensa.so
-        libqemu-riscv32.so
-        esp32-v3-rom.bin
-        esp32-v3-rom-app.bin
-        esp32c3-rom.bin
-        boot-images/
-      logs/
-        backend.out.log
-        frontend.out.log
-        build.log
-      validation/
-        full_profile_report.md
-      velxio.lock.json
+IoT-Studio/
+├── build.py               # the bootstrap script (this repo)
+├── README.md
+├── docs-QEMU-PREBUILT-v3.md
+├── prebuilt/              # QEMU assets (tracked, known-good)
+└── our-velxio/            # generated at runtime — never committed
+    └── upstream/          # shallow clone of velxio@oss
+        ├── backend/  frontend/  Dockerfile.oss  docker-compose.oss.yml
+        └── prebuilt/qemu/  # assets copied here before the image build
 ```
 
-## Profiles
-
-### Browser Profile
-
-The browser profile is the lightweight profile.
-
-```text
-browser = backend + frontend + AVR + RP2040
-```
-
-Use this when working only on:
-
-- Arduino Uno
-- Arduino Mega
-- Arduino Nano
-- ATtiny
-- Raspberry Pi Pico
-- Browser-side simulation
-- Frontend or UI work
-
-Command:
-
-```bash
-python3 build.py bootstrap --profile browser
-```
-
-### Full Profile
-
-The full profile is the current validated profile.
-
-```text
-full = browser + ESP32 + ESP32-C3 + ESP-IDF + native QEMU .so
-```
-
-Use this when working on:
-
-- ESP32
-- ESP32-S3
-- ESP32-C3
-- QEMU-backed emulation
-- ESP-IDF compilation
-- Native `.so` integration
-- Full local parity with Docker for ESP32-family boards
-
-Command:
-
-```bash
-python3 build.py bootstrap --profile full --qemu-provider source
-```
-
-## Main Commands
-
-### Run Full Bootstrap
-
-```bash
-python3 build.py bootstrap --profile full --qemu-provider source
-```
-
-This performs the full setup:
-
-1. Creates `our-velxio` structure.
-2. Clones upstream Velxio.
-3. Installs/checks OS packages.
-4. Sets up backend Python venv.
-5. Installs frontend dependencies.
-6. Installs Arduino CLI and board cores.
-7. Installs ESP32 Arduino core 2.0.17.
-8. Installs ESP-IDF v4.4.7.
-9. Builds QEMU native `.so` files from source.
-10. Copies ROM files.
-11. Writes environment files.
-12. Validates the environment.
-13. Writes lock and validation reports.
-
-### Start Services
-
-```bash
-python3 build.py start
-```
-
-Expected output:
-
-```text
-Backend:  http://127.0.0.1:8001
-Frontend: http://127.0.0.1:5173
-```
-
-### Stop Services
-
-```bash
-python3 build.py stop
-```
-
-### Check Status
-
-```bash
-python3 build.py status
-```
-
-### Run Doctor
-
-```bash
-python3 build.py doctor --profile full
-```
-
-### Run Smoke Test
-
-```bash
-python3 build.py smoke --profile full
-```
-
-## Opening from Windows Browser when Running in WSL
-
-From WSL, run:
-
-```bash
-cmd.exe /C start http://127.0.0.1:5173
-```
-
-Or manually open this in Windows browser:
-
-```text
-http://127.0.0.1:5173
-```
-
-## Logging
-
-### Capture bootstrap log
-
-```bash
-set -o pipefail
-python3 build.py bootstrap --profile full --qemu-provider source 2>&1 | tee log.txt
-echo "Exit code: ${PIPESTATUS[0]}" | tee -a log.txt
-```
-
-### Backend log
-
-```bash
-tail -100 our-velxio/downstream/logs/backend.out.log
-```
-
-### Frontend log
-
-```bash
-tail -100 our-velxio/downstream/logs/frontend.out.log
-```
-
-## Important Fixes Included
-
-### 1. ESP-IDF Python Environment Export
-
-The backend must run with the ESP-IDF exported environment.
-
-The script loads the environment equivalent to:
-
-```bash
-source our-velxio/downstream/cache/esp-idf/export.sh
-```
-
-This ensures the backend uses:
-
-- `IDF_PATH`
-- `IDF_TOOLS_PATH`
-- `IDF_PYTHON_ENV_PATH`
-- ESP-IDF Python virtual environment
-- ESP-IDF toolchain paths
-
-Without this, ESP-IDF compile may fail with messages like:
-
-```text
-IDF_PYTHON_ENV_PATH: (not set)
-Python interpreter used: /usr/bin/python
-Some Python dependencies must be installed
-```
-
-### 2. Ubuntu 24.04 Python / PEP 668 Fix
-
-Ubuntu 24.04 blocks some `pip --user` operations because of externally managed Python environments.
-
-The script installs/checks these packages when needed:
-
-```bash
-python3-full
-python3-virtualenv
-python-is-python3
-```
-
-This prevents ESP-IDF v4.4.7 from failing while trying to install `virtualenv`.
-
-### 3. QEMU Source Build Fix
-
-The script builds QEMU native libraries using the lcgamboa build script instead of calling QEMU `configure` with unsupported flags.
-
-Expected outputs:
-
-```text
-libqemu-xtensa.so
-libqemu-riscv32.so
-```
-
-These are copied into:
-
-```text
-our-velxio/downstream/lib/
-```
-
-### 4. Frontend `npx tsx` Prompt Fix
-
-The frontend generator uses:
-
-```bash
-npx tsx scripts/generate-component-metadata.ts
-```
-
-When started in the background, `npx` cannot ask:
-
-```text
-Ok to proceed? (y)
-```
-
-The script fixes this by:
-
-- Installing `tsx` at the upstream repo root.
-- Starting frontend with `npm_config_yes=true`.
-- Starting frontend with `CI=true`.
-
-### 5. Writable ESP-IDF Build Directory
-
-ESP-IDF compile uses:
-
-```text
-/var/lib/velxio-build
-```
-
-In WSL/manual mode, this directory must be writable by the current user.
-
-The script ensures:
-
-```bash
-sudo mkdir -p /var/lib/velxio-build /var/cache/ccache
-sudo chown -R $(id -u):$(id -g) /var/lib/velxio-build /var/cache/ccache
-chmod -R u+rwX /var/lib/velxio-build /var/cache/ccache
-```
-
-## Validation Status
-
-The current full profile has been validated for:
-
-- Backend startup
-- Frontend startup
-- ESP-IDF environment export
-- ESP32-C3 compile
-- ESP32-C3 compiled program returned
-- ESP32-C3 QEMU run started
-- Native QEMU `.so` load through Python `ctypes`
-
-## Known Non-Blocking Console Messages
-
-The following messages are expected in development mode and are not blockers:
-
-```text
-Download the React DevTools for a better development experience
-Lit is in dev mode
-/api/projects/featured?limit=12 404
-/api/metrics/run 404
-pinPositionCalculator Component ... not found in DOM
-```
-
-These do not prevent ESP32/ESP32-C3 compile and QEMU run.
-
-## Raspberry Pi Images
-
-Raspberry Pi image support is intentionally treated as a separate phase.
-
-Raspberry Pi emulation needs large boot assets such as:
-
-- Kernel image
-- Device tree
-- Raspberry Pi OS image
-- Boot image cache
-
-The recommended future profile model is:
-
-```text
-browser profile
-  AVR + RP2040
-
-full profile
-  browser + ESP32 + ESP32-C3 + ESP-IDF + native QEMU .so
-
-pi profile
-  full + Raspberry Pi boot image provider + Pi image cache
-```
-
-Suggested downstream paths:
-
-```text
-our-velxio/downstream/lib/boot-images/
-our-velxio/downstream/cache/boot-images/
-our-velxio/downstream/config/bootimages.env
-```
-
-Suggested environment:
-
-```bash
-export VELXIO_BOOT_IMAGES_LOCAL_DIR="/absolute/path/to/our-velxio/downstream/lib/boot-images"
-export VELXIO_BOOT_IMAGE_CACHE_DIR="/absolute/path/to/our-velxio/downstream/cache/boot-images"
-```
-
-## Recommended Git Workflow
-
-Check files:
-
-```bash
-git status
-```
-
-Add files:
-
-```bash
-git add build.py README.md
-```
-
-Commit:
-
-```bash
-git commit -m "feat(build): add full local Velxio profile with ESP-IDF and native QEMU"
-```
+`our-velxio/` is in `.gitignore`. If it ever gets in the way, delete it —
+the next run re-clones.
+
+---
+
+## Version history
+
+The `2.x-oss-developer` line is the current script lineage and supersedes the
+older native (pre-Docker) scripts and the `3.0.0-oss-dual-mode` interim
+release. Versions below are listed oldest → newest.
+
+### v1.x — native full-profile bootstrap (superseded)
+
+The original no-Docker flow: `build.py bootstrap --profile browser|full`,
+local Python venv + Node/Vite dev servers on ports 8001/5173, Arduino CLI with
+AVR/RP2040/ESP32 cores, ESP-IDF v4.4.7, and QEMU compiled **from source** on
+the host. Worked, but was slow to set up, host-dependent, and hard to keep
+reproducible. Retained only for historical reference.
+
+### v3.0.0-oss-dual-mode (superseded)
+
+Transitional Docker/native dual-mode script. Introduced the Docker OSS path,
+but tracked generated runtime state in Git (`our-velxio/` logs, caches,
+nested clones) which broke fresh clones, and shipped QEMU binaries linked
+against **glibc 2.43** — a version no stable distro provides — so every ESP32
+simulation crashed inside the Debian 13 runtime image.
+
+### v2.0.0-oss-developer — the rewrite
+
+Ground-up rewrite to a strict Docker-only, single-command bootstrap:
+
+- One command = full setup (validate → clone velxio@oss → sync assets →
+  `docker compose build` → `up -d` → health poll on `:3080/health`)
+- Zero-auth design: no gh CLI, no token, no Git identity, no license key
+- QEMU asset validation (presence, size, ELF magic)
+- Velxio checkout contract verification (required files + branch pin)
+- Full subcommand surface: `setup build rebuild start stop restart status
+  logs qemu doctor clean`
+- `doctor`: 7-check environment diagnosis
+- `clean`: project-scoped Docker teardown only
+
+### v2.1.0 — the glibc fix + self-healing assets
+
+Fixes the crash that shipped with v3.0.0 and makes bad assets impossible to
+miss:
+
+- **Replaced the broken binaries** (glibc 2.43) with the known-good set
+  linked against glibc 2.34 (GCC 11.4.0 / Ubuntu 22.04 toolchain) in all
+  tracked locations
+- **glibc ceiling validation**: every `.so` is scanned for `GLIBC_x.y`
+  requirements; anything newer than 2.41 is rejected at bootstrap with a
+  clear explanation instead of crashing the ESP32 worker at first Run
+- **Auto-download fallback**: if `prebuilt/` is missing or invalid, the
+  script fetches the `qemu-prebuilt-v3` release bundle automatically and
+  re-validates
+- **Fixed `doctor` crash**: `compose()` did not accept the `check` kwarg that
+  `doctor` passes — every `doctor` run died with a `TypeError`
+- **Repo layout cleanup**: removed 18 tracked runtime-state files that made
+  fresh clones fail with "not a valid Velxio Git checkout"; `our-velxio/`
+  is now gitignored and fully generated
+- Published [`qemu-prebuilt-v3`](https://github.com/ZhadowValker/IoT-Studio/releases/tag/qemu-prebuilt-v3)
+  with the dependency documentation
+
+### v2.2.0 — build summary (current)
+
+- `setup` and `rebuild` now print a **build summary** after success: image
+  name + sha256 + size + build time, container status and port mapping,
+  compose volumes, app URL, source checkout location, and the stack
+  description
+- New `summary` subcommand to print the same block on demand
+- Cosmetic: container line renders as `Up ... (ports)` instead of a raw
+  pipe-separated format
+
+---
 
 ## Troubleshooting
 
-### Frontend does not open
+**`worker exited unexpectedly (code 1)` when clicking Run on an ESP32 board**
 
-Check:
+The QEMU library failed to load. On v2.1.0+ this is caught at bootstrap by
+the glibc check. If you replaced `prebuilt/*.so` yourself, restore the
+known-good set (`python3 build.py qemu` re-validates; or delete `prebuilt/`
+and re-run setup to auto-download the release).
+
+**`Existing Velxio checkout is on '…', expected 'oss'`**
+
+`our-velxio/upstream` was checked out on a different branch (or detached
+HEAD). Either `git checkout oss` inside it, or delete `our-velxio/` and
+re-run — it re-clones.
+
+**`…exists but is not a valid Velxio Git checkout`**
+
+Something non-Git is occupying `our-velxio/upstream`. Move it aside (or
+delete it) and re-run.
+
+**Port 3080 already in use**
+
+Another stack (possibly an older Velxio deployment) owns the port:
+`docker ps --filter name=velxio` to find it, then `docker rm -f velxio-oss`,
+or stop whatever else holds 3080.
+
+**`Velxio OSS did not become healthy within 180 seconds`**
+
+Check `python3 build.py logs`. Common causes: first boot on a slow machine
+(ESP-IDF setup on first compile), or the container crash-looping — the logs
+will say which.
+
+**`doctor` reports the health endpoint as FAIL while the stack is stopped**
+
+Expected: doctor checks the live endpoint, and a stopped stack is "not
+running", not "broken". Run `python3 build.py start`, then doctor again.
+
+**Docker daemon not available**
+
+Start Docker Desktop / `systemctl start docker` and re-run. `clean` also
+requires a live daemon (a `down` against a dead daemon has nothing to talk
+to).
+
+---
+
+## Uninstall
+
+Everything lives inside Docker, scoped to project `velxio-oss`:
 
 ```bash
-tail -100 our-velxio/downstream/logs/frontend.out.log
+python3 build.py clean --volumes   # containers, networks, named volumes
+docker rmi velxio-oss-velxio-oss   # the image
+rm -rf our-velxio/                 # the generated source tree
 ```
 
-If you see an `npx tsx` prompt, rerun bootstrap:
-
-```bash
-python3 build.py bootstrap --profile full --qemu-provider source
-python3 build.py start
-```
-
-### Backend starts but ESP32 compile fails
-
-Check:
-
-```bash
-tail -150 our-velxio/downstream/logs/backend.out.log
-```
-
-Look for:
-
-```text
-IDF_PYTHON_ENV_PATH
-Python interpreter used
-Permission denied: /var/lib/velxio-build
-```
-
-Then rerun:
-
-```bash
-python3 build.py stop
-python3 build.py bootstrap --profile full --qemu-provider source
-python3 build.py start
-```
-
-### Windows browser cannot open WSL app
-
-Run from WSL:
-
-```bash
-cmd.exe /C start http://127.0.0.1:5173
-```
-
-## Current Success Criteria
-
-The full profile is considered successful when all of these are true:
-
-```text
-Backend starts on port 8001
-Frontend starts on port 5173
-ESP32-C3 compiles successfully
-ESP32-C3 returns compiledProgram
-ESP32-C3 QEMU run starts
-Native QEMU .so loads through ctypes
-```
+Nothing else on your machine is touched. Reinstall any time with
+`python3 build.py`.
