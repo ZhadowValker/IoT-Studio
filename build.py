@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 
-VERSION = "2.1.0-oss-developer"
+VERSION = "2.2.0-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
 VELXIO_BRANCH = "oss"
@@ -369,6 +369,48 @@ def compose(
     )
 
 
+def image_summary() -> None:
+    """Print what the build actually put on this machine."""
+    result = run(
+        ["docker", "images", COMPOSE_PROJECT + "-velxio-oss", "--format",
+         "{{.Repository}}:{{.Tag}}|{{.ID}}|{{.Size}}|{{.CreatedAt}}"],
+        capture=True,
+        check=False,
+    )
+    line = (result.stdout or "").strip().splitlines()
+    if not line:
+        warning("Image not found — build may have failed")
+        return
+
+    repository, image_id, size, created = line[0].split("|", 3)
+
+    container = run(
+        ["docker", "ps", "--filter", "name=velxio-oss", "--format",
+         "{{.Status}} ({{.Ports}})"],
+        capture=True,
+        check=False,
+    ).stdout.strip() or "not running"
+
+    volumes = run(
+        ["docker", "volume", "ls", "--format", "{{.Name}}",
+         "--filter", "label=com.docker.compose.project=" + COMPOSE_PROJECT],
+        capture=True,
+        check=False,
+    ).stdout.split()
+
+    print()
+    print(" Build summary")
+    print(f"   Image       : {repository} (sha256:{image_id[:12]}…)")
+    print(f"   Size        : {size}")
+    print(f"   Built       : {created}")
+    print(f"   Container   : velxio-oss ({container})")
+    print(f"   Volumes     : {', '.join(volumes) if volumes else 'none'}")
+    print(f"   App         : http://localhost:3080")
+    print(f"   Source      : {root() / VELXIO_DIR} (branch {VELXIO_BRANCH})")
+    print(f"   Stack       : Debian 13 · nginx + FastAPI · ESP-IDF v5 · "
+          f"QEMU xtensa/riscv32 (glibc 2.34)")
+
+
 def wait_for_health(timeout: int = 180) -> bool:
     deadline = time.time() + timeout
 
@@ -413,6 +455,7 @@ def setup() -> None:
     compose(["up", "-d"])
     health()
 
+    image_summary()
     print()
     success("Developer setup complete")
     print("Open: http://localhost:3080")
@@ -437,6 +480,7 @@ def rebuild(no_cache: bool = False) -> None:
     build(no_cache=no_cache)
     compose(["up", "-d"])
     health()
+    image_summary()
 
 
 def start() -> None:
@@ -563,6 +607,10 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("stop", help="Stop Velxio OSS.")
     sub.add_parser("restart", help="Restart Velxio OSS.")
     sub.add_parser("status", help="Show Velxio Docker status.")
+    sub.add_parser(
+        "summary",
+        help="Show the built image, container and volumes.",
+    )
     sub.add_parser("logs", help="Show the latest Velxio container logs.")
     sub.add_parser("qemu", help="Synchronize IoT-Studio QEMU assets.")
     sub.add_parser("doctor", help="Diagnose the developer environment.")
@@ -616,6 +664,9 @@ def main() -> int:
             restart()
         elif command == "status":
             status()
+        elif command == "summary":
+            check_host()
+            image_summary()
         elif command == "logs":
             logs()
         elif command == "qemu":
