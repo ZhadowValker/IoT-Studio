@@ -273,7 +273,14 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.3.2 — IoT Gateway badge fix (current)
+### v2.3.3 — IoT Gateway badge fix, part 2 (current)
+
+- The backend's serial buffer flushes on every `.`, so `192.168.4.15` reached
+  the WiFi status parser in four pieces and never matched. `rebrand.py` now
+  parses whole serial lines, so the WiFi icon turns green and the Serial
+  Monitor shows the "Open IoT Gateway" link once the sketch prints its IP
+
+### v2.3.2 — IoT Gateway badge fix
 
 - `rebrand.py` makes the WiFi badge and the Serial Monitor "Open IoT Gateway"
   link work for Arduino sketches: a station address (192.168.4.x, not .1-.3)
@@ -379,7 +386,7 @@ adds `--legacy-peer-deps` to the Dockerfile's `npm install` automatically; run
 
 **WiFi icon stays grey / no "Open IoT Gateway" link for an ESP32 web server**
 
-Fixed in v2.3.2 (`git pull && python3 build.py rebuild`). Until then the
+Fixed in v2.3.3 (`git pull && python3 build.py rebuild`). Until then the
 gateway still works by URL: `http://localhost:3080/api/gateway/<client id>/`,
 where the client id is printed in `docker compose -p velxio-oss logs` as
 `[<id>::esp32-devkit-c-v4]`.

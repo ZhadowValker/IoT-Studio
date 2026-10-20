@@ -776,6 +776,32 @@ def patch_wifi_status(tree: Path, rep: Report) -> None:
     )
 
 
+def patch_wifi_line_buffer(tree: Path, rep: Report) -> None:
+    """Parse WiFi status from whole serial lines, not flush-sized chunks.
+
+    The backend's UART buffer flushes on every '.', so an address such as
+    ``192.168.4.15`` reaches the status parser in four pieces and can never
+    match (ESP-IDF's own ``sta ip: 192.168.4.2`` lines suffer the same).
+    Accumulate the text and hand the parser complete lines only.
+    """
+    path = tree / "backend" / "app" / "services" / "esp32_lib_manager.py"
+    pad = " " * 32
+    replace_exact(
+        rep,
+        path,
+        pad + "wifi_evts, ble_evts = parse_serial_text(text)\n",
+        pad + "# IoT-Studio: parse complete lines (the buffer flushes on '.').\n"
+        + pad + "_wt = (getattr(inst, '_wifi_tail', '') + text)[-4096:]\n"
+        + pad + "_wt_done = ''\n"
+        + pad + "if '\\n' in _wt or '\\r' in _wt:\n"
+        + pad + "    _cut = max(_wt.rfind('\\n'), _wt.rfind('\\r')) + 1\n"
+        + pad + "    _wt_done, _wt = _wt[:_cut], _wt[_cut:]\n"
+        + pad + "setattr(inst, '_wifi_tail', _wt)\n"
+        + pad + "wifi_evts, ble_evts = parse_serial_text(_wt_done)\n",
+        "wifi status: parse whole serial lines",
+    )
+
+
 def write_notice(tree: Path, rep: Report) -> None:
     path = tree / "NOTICE-IoT-Studio.md"
     body = (
@@ -815,6 +841,7 @@ PATCHES = (
     patch_backend,
     patch_build_fixes,
     patch_wifi_status,
+    patch_wifi_line_buffer,
     write_notice,
 )
 
