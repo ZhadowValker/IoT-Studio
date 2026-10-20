@@ -722,6 +722,23 @@ def patch_backend(tree: Path, rep: Report) -> None:
     )
 
 
+def patch_build_fixes(tree: Path, rep: Report) -> None:
+    """Fixes for upstream build breakage that is independent of branding.
+
+    Velxio's frontend has no committed lockfile, so ``npm install`` resolves
+    the newest matching dependency versions on every build. With the current
+    tree, npm 10 crashes in its resolver ("Cannot read properties of null
+    (reading 'edgesOut')") unless peer-dependency resolution is relaxed.
+    """
+    replace_exact(
+        rep,
+        tree / "Dockerfile.oss",
+        " && npm install --include=optional \\\n",
+        " && npm install --include=optional --legacy-peer-deps \\\n",
+        "build fix: npm install --legacy-peer-deps (Dockerfile.oss)",
+    )
+
+
 def write_notice(tree: Path, rep: Report) -> None:
     path = tree / "NOTICE-IoT-Studio.md"
     body = (
@@ -759,6 +776,7 @@ PATCHES = (
     patch_locales,
     patch_compose,
     patch_backend,
+    patch_build_fixes,
     write_notice,
 )
 

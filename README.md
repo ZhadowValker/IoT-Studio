@@ -273,7 +273,13 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.3.0 — white-label (current)
+### v2.3.1 — npm build fix (current)
+
+- `rebrand.py` adds `--legacy-peer-deps` to the Velxio Dockerfile's
+  `npm install`, fixing the `edgesOut` resolver crash that stopped the image
+  build at the frontend stage
+
+### v2.3.0 — white-label
 
 - New `rebrand.py`, run automatically after the clone: the app is branded
   **IoT-Studio** (header, titles, meta/OG, manifest, canonical + sitemap URLs,
@@ -355,6 +361,13 @@ re-run — it re-clones.
 
 Something non-Git is occupying `our-velxio/upstream`. Move it aside (or
 delete it) and re-run.
+
+**`npm error Cannot read properties of null (reading 'edgesOut')` during the image build**
+
+Velxio's frontend has no lockfile, so npm re-resolves dependencies on every
+build and its resolver crashes on the current tree. From v2.3.1 `rebrand.py`
+adds `--legacy-peer-deps` to the Dockerfile's `npm install` automatically; run
+`git pull && python3 build.py rebuild`.
 
 **Port 3080 already in use**
 
