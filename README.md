@@ -273,7 +273,15 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.3.1 — npm build fix (current)
+### v2.3.2 — IoT Gateway badge fix (current)
+
+- `rebrand.py` makes the WiFi badge and the Serial Monitor "Open IoT Gateway"
+  link work for Arduino sketches: a station address (192.168.4.x, not .1-.3)
+  printed by the sketch now counts as "got IP". Upstream only recognised
+  ESP-IDF info logs, which the Arduino build does not emit, so the badge
+  stayed grey and the link never appeared
+
+### v2.3.1 — npm build fix
 
 - `rebrand.py` adds `--legacy-peer-deps` to the Velxio Dockerfile's
   `npm install`, fixing the `edgesOut` resolver crash that stopped the image
@@ -368,6 +376,13 @@ Velxio's frontend has no lockfile, so npm re-resolves dependencies on every
 build and its resolver crashes on the current tree. From v2.3.1 `rebrand.py`
 adds `--legacy-peer-deps` to the Dockerfile's `npm install` automatically; run
 `git pull && python3 build.py rebuild`.
+
+**WiFi icon stays grey / no "Open IoT Gateway" link for an ESP32 web server**
+
+Fixed in v2.3.2 (`git pull && python3 build.py rebuild`). Until then the
+gateway still works by URL: `http://localhost:3080/api/gateway/<client id>/`,
+where the client id is printed in `docker compose -p velxio-oss logs` as
+`[<id>::esp32-devkit-c-v4]`.
 
 **Port 3080 already in use**
 

@@ -739,6 +739,43 @@ def patch_build_fixes(tree: Path, rep: Report) -> None:
     )
 
 
+def patch_wifi_status(tree: Path, rep: Report) -> None:
+    """Let the WiFi badge / Serial Monitor gateway link go green for sketches.
+
+    Upstream derives the "got an IP" state only from ESP-IDF info logs
+    (``sta ip: ...``). The Arduino build here logs at warning level, so those
+    lines never reach the serial stream and the badge stays grey forever --
+    which also hides the Serial Monitor's "Open IoT Gateway" link, even though
+    the sketch printed its address and the proxy would work. Treat a
+    192.168.4.x address printed by the sketch as got_ip (.1/.2/.3 are the
+    soft-AP / gateway / DNS addresses, never the station's lease).
+    """
+    path = tree / "backend" / "app" / "services" / "wifi_status_parser.py"
+    replace_exact(
+        rep,
+        path,
+        "# ── BLE patterns ──",
+        "# IoT-Studio: station address printed by the sketch itself (not .1-.3).\n"
+        "_RE_SKETCH_STA_IP = re.compile(\n"
+        "    r'\\b(192\\.168\\.4\\.(?!(?:1|2|3)(?!\\d))\\d{1,3})(?!\\d)'\n"
+        ")\n\n"
+        "# ── BLE patterns ──",
+        "wifi status: sketch-printed IP regex",
+    )
+    replace_exact(
+        rep,
+        path,
+        "    if _RE_WIFI_CONNECTED.search(line):\n"
+        "        m = _RE_WIFI_CONNECTED.search(line)\n",
+        "    m = _RE_SKETCH_STA_IP.search(line)\n"
+        "    if m:\n"
+        "        return WifiEvent(status='got_ip', ip=m.group(1))\n\n"
+        "    if _RE_WIFI_CONNECTED.search(line):\n"
+        "        m = _RE_WIFI_CONNECTED.search(line)\n",
+        "wifi status: treat sketch-printed IP as got_ip",
+    )
+
+
 def write_notice(tree: Path, rep: Report) -> None:
     path = tree / "NOTICE-IoT-Studio.md"
     body = (
@@ -777,6 +814,7 @@ PATCHES = (
     patch_compose,
     patch_backend,
     patch_build_fixes,
+    patch_wifi_status,
     write_notice,
 )
 

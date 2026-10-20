@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 
-VERSION = "2.3.1-oss-developer"
+VERSION = "2.3.2-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
 VELXIO_BRANCH = "oss"
