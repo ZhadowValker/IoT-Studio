@@ -1,0 +1,19 @@
+# Run the published IoT-Studio image (no build needed):
+#   docker compose -f docker-compose.release.yml up -d
+# then open http://localhost:3080
+services:
+  iot-studio:
+    image: ghcr.io/zhadowvalker/iot-studio:latest
+    container_name: iot-studio
+    restart: unless-stopped
+    ports:
+      - "3080:80"
+    environment:
+      VELXIO_NEWS: "off"
+    volumes:
+      - iot-studio-build:/app/build
+      - iot-studio-ccache:/root/.cache/ccache
+
+volumes:
+  iot-studio-build:
+  iot-studio-ccache:

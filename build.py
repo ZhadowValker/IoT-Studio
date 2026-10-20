@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 
-VERSION = "2.3.3-oss-developer"
+VERSION = "2.4.0-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
 VELXIO_BRANCH = "oss"
@@ -366,10 +366,13 @@ def rebrand_velxio() -> None:
         success("White-label already applied")
 
     if report.missing:
-        warning(
+        message = (
             "Some branding patches did not match this Velxio revision:\n"
             + "\n".join(f"  - {item}" for item in report.missing)
         )
+        if os.environ.get("IOT_STUDIO_STRICT") == "1":
+            raise BuildError(message)
+        warning(message)
 
 
 def compose(
@@ -501,6 +504,17 @@ def build(no_cache: bool = False) -> None:
 
     compose(command)
     success("Velxio OSS image built")
+
+
+def prepare() -> None:
+    """Prepare the build context (clone, verify, white-label, QEMU assets)
+    without needing Docker. Used by CI before ``docker build``."""
+    clone_velxio()
+    verify_velxio()
+    rebrand_velxio()
+    validate_provider_assets(allow_fetch=False)
+    sync_qemu()
+    success(f"Build context ready: {root() / VELXIO_DIR}")
 
 
 def rebuild(no_cache: bool = False) -> None:
@@ -644,6 +658,10 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("qemu", help="Synchronize IoT-Studio QEMU assets.")
     sub.add_parser("doctor", help="Diagnose the developer environment.")
     sub.add_parser(
+        "prepare",
+        help="Prepare the Docker build context without Docker (used by CI).",
+    )
+    sub.add_parser(
         "rebrand",
         help="Re-apply the IoT-Studio white-label patches to the checkout.",
     )
@@ -706,6 +724,8 @@ def main() -> int:
             qemu()
         elif command == "doctor":
             return doctor()
+        elif command == "prepare":
+            prepare()
         elif command == "rebrand":
             clone_velxio()
             verify_velxio()

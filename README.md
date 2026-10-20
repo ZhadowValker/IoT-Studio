@@ -273,7 +273,19 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.3.3 — IoT Gateway badge fix, part 2 (current)
+### v2.4.0 — CI/CD image release (current)
+
+- New GitHub Actions workflow (`.github/workflows/release-image.yml`): every
+  push to `whitelabel-iot-studio` (plus a weekly rebuild and manual runs)
+  builds the white-labelled image and publishes it to
+  `ghcr.io/zhadowvalker/iot-studio` as `:latest`, `:<version>` and `:sha-<commit>`;
+  a GitHub Release `v<version>` is created whenever the version in `build.py`
+  is new
+- New `python3 build.py prepare` (clone + white-label + QEMU assets, no Docker)
+  and `IOT_STUDIO_STRICT=1` (fail if a branding patch stops matching upstream)
+- New `docker-compose.release.yml` to run the published image without building
+
+### v2.3.3 — IoT Gateway badge fix, part 2
 
 - The backend's serial buffer flushes on every `.`, so `192.168.4.15` reached
   the WiFi status parser in four pieces and never matched. `rebrand.py` now
@@ -428,3 +440,37 @@ rm -rf our-velxio/                 # the generated source tree
 
 Nothing else on your machine is touched. Reinstall any time with
 `python3 build.py`.
+
+## CI/CD: published container image
+
+`.github/workflows/release-image.yml` builds and publishes the image
+automatically:
+
+| Trigger | Result |
+|---|---|
+| Push to `whitelabel-iot-studio` (non-Markdown changes) | Image pushed as `:latest`, `:<version>`, `:sha-<commit>` |
+| New version in `build.py` | Also creates the GitHub Release `v<version>` |
+| Mondays 03:30 UTC / manual run | Rebuild against the newest upstream Velxio |
+
+Run the released image without building anything:
+
+```bash
+docker compose -f docker-compose.release.yml up -d     # http://localhost:3080
+# or
+docker run -d --name iot-studio -p 3080:80 ghcr.io/zhadowvalker/iot-studio:latest
+```
+
+One-time setup on GitHub:
+
+1. **Settings → Actions → General → Workflow permissions**: *Read and write*.
+2. After the first run, **Your profile → Packages → iot-studio → Package
+   settings → Change visibility → Public** (new GHCR packages start private),
+   so `docker pull` works without logging in.
+3. Optional: set a repository variable `IOT_STUDIO_URL` (Settings → Secrets and
+   variables → Actions → Variables) to bake your public site URL into the
+   canonical/OG tags.
+
+To release a new version, bump `VERSION` in `build.py` and push. Builds take
+roughly 30-60 minutes (the ESP-IDF toolchain stage dominates; later runs reuse
+the cache). The image is `linux/amd64` only because the bundled QEMU libraries
+are x86-64.
