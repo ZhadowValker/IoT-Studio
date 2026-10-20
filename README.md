@@ -190,7 +190,7 @@ After a successful setup:
 IoT-Studio/
 ├── build.py               # the bootstrap script (this repo)
 ├── rebrand.py             # IoT-Studio white-label patcher
-├── branding/              # social-preview image + the scripts that generate it
+├── branding/              # social-preview image, favicons + the scripts that generate them
 ├── README.md
 ├── docs-QEMU-PREBUILT-v3.md
 ├── prebuilt/              # QEMU assets (tracked, known-good)
@@ -278,7 +278,8 @@ miss:
 - New `rebrand.py`, run automatically after the clone: the app is branded
   **IoT-Studio** (header, titles, meta/OG, manifest, canonical + sitemap URLs,
   Help menu, locales, API title), plus a new purple/black/white social-preview
-  image from `branding/`
+  image and favicon set from `branding/`
+- UI-wide `#A70CFF` / black / white theme (dark + light) with brand gradients
 - Disables the GitHub-star popup and the velxio.dev news feed
 - Keeps upstream licence files, adds `NOTICE-IoT-Studio.md`, an in-app *Source
   code (AGPLv3)* link and a *Built on Velxio* credit
@@ -298,14 +299,23 @@ and upstream updates. Every patch is idempotent, and an anchor that no longer
 matches a newer Velxio revision is reported as a warning rather than skipped.
 
 **What changes:** header title, page titles, meta/Open Graph tags, PWA manifest,
-canonical and sitemap URLs, the social-preview image (`branding/`), Help-menu
-links, API title, locale strings, and the exported-project README. The GitHub-star popup and the velxio.dev "What's New"
+canonical and sitemap URLs, the social-preview image and favicon set
+(`branding/`), Help-menu links, API title, locale strings, and the
+exported-project README. The GitHub-star popup and the velxio.dev "What's New"
 feed are turned off (`VELXIO_NEWS=off`).
 
 **What deliberately stays:** `LICENSE` and `COMMERCIAL_LICENSE.md`, the
 `Velxio-GUEST` emulated WiFi network (it is baked into the QEMU firmware), and
 internal identifiers such as the `.vlx` project extension and Docker volume
 names. Example descriptions in the gallery still mention Velxio in places.
+
+**Theme:** the whole UI uses one palette, `#A70CFF` + black + white, in both the
+dark and light themes. Colour tokens (`tokens/colors.css`) are remapped to
+neutral greys and a purple accent scale, the hard-coded brand blues in
+components are replaced, and the header wordmark and hairline use a
+white-to-purple gradient (black-to-purple on light). Colours that carry meaning
+are left alone: wire and part colours, SPICE probe colours, board-type tags,
+and the success / error / warning states.
 
 **Licence:** Velxio is AGPLv3. A rebranded, network-accessible deployment must
 offer its source, so the Help menu carries *Source code (AGPLv3)* and

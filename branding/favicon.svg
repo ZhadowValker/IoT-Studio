@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A70CFF"/>
+      <stop offset="1" stop-color="#C85BFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#000000"/>
+  <!-- IC body -->
+  <rect x="8" y="8" width="16" height="16" rx="2" fill="url(#g)"/>
+  <!-- Die (black inset) -->
+  <rect x="11" y="11" width="10" height="10" rx="1" fill="#000000"/>
+  <!-- Pin-1 marker -->
+  <circle cx="13.5" cy="13.5" r="1.1" fill="#ffffff"/>
+  <!-- Top pins -->
+  <rect x="12" y="3" width="3" height="5" rx="1" fill="#ffffff"/>
+  <rect x="17" y="3" width="3" height="5" rx="1" fill="#ffffff"/>
+  <!-- Bottom pins -->
+  <rect x="12" y="24" width="3" height="5" rx="1" fill="#ffffff"/>
+  <rect x="17" y="24" width="3" height="5" rx="1" fill="#ffffff"/>
+  <!-- Left pins -->
+  <rect x="3" y="12" width="5" height="3" rx="1" fill="#ffffff"/>
+  <rect x="3" y="17" width="5" height="3" rx="1" fill="#ffffff"/>
+  <!-- Right pins -->
+  <rect x="24" y="12" width="5" height="3" rx="1" fill="#ffffff"/>
+  <rect x="24" y="17" width="5" height="3" rx="1" fill="#ffffff"/>
+</svg>
