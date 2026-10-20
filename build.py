@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 
-VERSION = "2.2.0-oss-developer"
+VERSION = "2.3.0-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
 VELXIO_BRANCH = "oss"
@@ -347,6 +347,31 @@ def verify_velxio() -> None:
     success("Velxio OSS checkout verified")
 
 
+def rebrand_velxio() -> None:
+    """Apply the IoT-Studio white-label patches to the cloned Velxio tree.
+
+    Idempotent; set IOT_STUDIO_WHITELABEL=0 to build stock Velxio instead.
+    """
+    if os.environ.get("IOT_STUDIO_WHITELABEL", "1") == "0":
+        warning("IOT_STUDIO_WHITELABEL=0 - building stock Velxio branding")
+        return
+
+    import rebrand
+
+    report = rebrand.apply(root() / VELXIO_DIR)
+
+    if report.applied:
+        success(f"White-label applied ({len(report.applied)} patches)")
+    else:
+        success("White-label already applied")
+
+    if report.missing:
+        warning(
+            "Some branding patches did not match this Velxio revision:\n"
+            + "\n".join(f"  - {item}" for item in report.missing)
+        )
+
+
 def compose(
     args: list[str],
     *,
@@ -447,6 +472,7 @@ def setup() -> None:
     validate_provider_assets()
     clone_velxio()
     verify_velxio()
+    rebrand_velxio()
     sync_qemu()
 
     compose(["build"])
@@ -465,6 +491,7 @@ def build(no_cache: bool = False) -> None:
     check_host()
     clone_velxio()
     verify_velxio()
+    rebrand_velxio()
     validate_provider_assets()
     sync_qemu()
 
@@ -487,6 +514,7 @@ def start() -> None:
     check_host()
     clone_velxio()
     verify_velxio()
+    rebrand_velxio()
     validate_provider_assets()
     sync_qemu()
 
@@ -523,6 +551,7 @@ def qemu() -> None:
         clone_velxio()
 
     verify_velxio()
+    rebrand_velxio()
     sync_qemu()
 
 
@@ -614,6 +643,10 @@ def parse_args() -> argparse.Namespace:
     sub.add_parser("logs", help="Show the latest Velxio container logs.")
     sub.add_parser("qemu", help="Synchronize IoT-Studio QEMU assets.")
     sub.add_parser("doctor", help="Diagnose the developer environment.")
+    sub.add_parser(
+        "rebrand",
+        help="Re-apply the IoT-Studio white-label patches to the checkout.",
+    )
 
     rebuild_parser = sub.add_parser(
         "rebuild",
@@ -673,6 +706,10 @@ def main() -> int:
             qemu()
         elif command == "doctor":
             return doctor()
+        elif command == "rebrand":
+            clone_velxio()
+            verify_velxio()
+            rebrand_velxio()
         elif command == "clean":
             clean(volumes=args.volumes)
         else:

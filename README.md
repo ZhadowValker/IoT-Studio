@@ -14,7 +14,7 @@ That single command:
 1. validates your host (git, docker, python3, curl, Docker daemon, Compose v2)
 2. validates the QEMU emulation assets in `prebuilt/` (see [below](#the-prebuilt-binaries))
 3. shallow-clones the Velxio OSS source (`ZhadowValker/velxio`, branch `oss`) into `our-velxio/upstream/`
-4. copies the QEMU assets into the source tree
+4. applies the IoT-Studio white-label ([`rebrand.py`](rebrand.py)) and copies the QEMU assets into the source tree
 5. builds the strict OSS Docker image (Debian 13 · nginx + FastAPI · ESP-IDF v5)
 6. starts the container and waits for the health endpoint
 7. prints a build summary (image, container, volumes) and the app URL
@@ -37,6 +37,7 @@ downloads are required.
 - [QEMU binary compatibility (glibc)](#qemu-binary-compatibility-glibc)
 - [Folder structure](#folder-structure)
 - [Version history](#version-history)
+- [White-label](#white-label)
 - [Troubleshooting](#troubleshooting)
 - [Uninstall](#uninstall)
 
@@ -76,6 +77,7 @@ the same as `setup`.
 | `python3 build.py summary` | Print the image, container and volumes summary on demand |
 | `python3 build.py logs` | Last 200 container log lines |
 | `python3 build.py qemu` | Re-validate + re-sync QEMU assets only |
+| `python3 build.py rebrand` | Re-apply the IoT-Studio white-label patches to the checkout |
 | `python3 build.py doctor` | Diagnose the environment (7 checks) |
 | `python3 build.py clean [--volumes]` | Remove this project's Docker resources (containers, networks). `--volumes` also removes the named build/ccache volumes |
 
@@ -187,6 +189,8 @@ After a successful setup:
 ```text
 IoT-Studio/
 ├── build.py               # the bootstrap script (this repo)
+├── rebrand.py             # IoT-Studio white-label patcher
+├── branding/              # social-preview image + the scripts that generate it
 ├── README.md
 ├── docs-QEMU-PREBUILT-v3.md
 ├── prebuilt/              # QEMU assets (tracked, known-good)
@@ -259,7 +263,7 @@ miss:
 - Published [`qemu-prebuilt-v3`](https://github.com/ZhadowValker/IoT-Studio/releases/tag/qemu-prebuilt-v3)
   with the dependency documentation
 
-### v2.2.0 — build summary (current)
+### v2.2.0 — build summary
 
 - `setup` and `rebuild` now print a **build summary** after success: image
   name + sha256 + size + build time, container status and port mapping,
@@ -268,6 +272,57 @@ miss:
 - New `summary` subcommand to print the same block on demand
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
+
+### v2.3.0 — white-label (current)
+
+- New `rebrand.py`, run automatically after the clone: the app is branded
+  **IoT-Studio** (header, titles, meta/OG, manifest, canonical + sitemap URLs,
+  Help menu, locales, API title), plus a new purple/black/white social-preview
+  image from `branding/`
+- Disables the GitHub-star popup and the velxio.dev news feed
+- Keeps upstream licence files, adds `NOTICE-IoT-Studio.md`, an in-app *Source
+  code (AGPLv3)* link and a *Built on Velxio* credit
+- New `rebrand` subcommand; `IOT_STUDIO_NAME`, `IOT_STUDIO_URL`,
+  `IOT_STUDIO_SOURCE` and `IOT_STUDIO_WHITELABEL` environment variables
+
+---
+
+## White-label
+
+[#white-label](#white-label)
+
+The app you get at `http://localhost:3080` is branded **IoT-Studio**, not Velxio.
+`rebrand.py` patches the freshly cloned source before the Docker build, so the
+Velxio code is still never committed here and the rebrand survives re-clones
+and upstream updates. Every patch is idempotent, and an anchor that no longer
+matches a newer Velxio revision is reported as a warning rather than skipped.
+
+**What changes:** header title, page titles, meta/Open Graph tags, PWA manifest,
+canonical and sitemap URLs, the social-preview image (`branding/`), Help-menu
+links, API title, locale strings, and the exported-project README. The GitHub-star popup and the velxio.dev "What's New"
+feed are turned off (`VELXIO_NEWS=off`).
+
+**What deliberately stays:** `LICENSE` and `COMMERCIAL_LICENSE.md`, the
+`Velxio-GUEST` emulated WiFi network (it is baked into the QEMU firmware), and
+internal identifiers such as the `.vlx` project extension and Docker volume
+names. Example descriptions in the gallery still mention Velxio in places.
+
+**Licence:** Velxio is AGPLv3. A rebranded, network-accessible deployment must
+offer its source, so the Help menu carries *Source code (AGPLv3)* and
+*Built on Velxio* links and the tree gets a `NOTICE-IoT-Studio.md`. If you ship a
+closed-source or commercial product, you need Velxio's commercial licence.
+
+Optional environment variables, set before running `python3 build.py`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `IOT_STUDIO_NAME` | `IoT-Studio` | Display name |
+| `IOT_STUDIO_URL` | `http://localhost:3080` | Public URL used for canonical / sitemap / Open Graph |
+| `IOT_STUDIO_SOURCE` | `https://github.com/ZhadowValker/IoT-Studio` | Target of the *Source code* link |
+| `IOT_STUDIO_WHITELABEL` | `1` | Set to `0` to build stock Velxio branding |
+
+After changing a variable, run `python3 build.py rebuild`. Re-apply on an
+existing checkout with `python3 build.py rebrand`.
 
 ---
 
