@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 
-VERSION = "2.4.0-oss-developer"
+VERSION = "2.5.0-dev-oss-developer"
 
 VELXIO_REPO = "https://github.com/ZhadowValker/velxio.git"
 VELXIO_BRANCH = "oss"
@@ -375,6 +375,34 @@ def rebrand_velxio() -> None:
         warning(message)
 
 
+def agent_overlay() -> None:
+    """Copy the AI-agent overlay into the cloned tree and mount its hooks.
+
+    Idempotent; set IOT_STUDIO_AGENT=0 to build without the agent.
+    """
+    if os.environ.get("IOT_STUDIO_AGENT", "1") == "0":
+        warning("IOT_STUDIO_AGENT=0 - building without the AI agent")
+        return
+
+    import agent_patch
+
+    report = agent_patch.apply(root() / VELXIO_DIR)
+
+    if report.applied:
+        success(f"AI agent overlay applied ({len(report.applied)} changes)")
+    else:
+        success("AI agent overlay already applied")
+
+    if report.missing:
+        message = (
+            "Some agent hook patches did not match this Velxio revision:\n"
+            + "\n".join(f"  - {item}" for item in report.missing)
+        )
+        if os.environ.get("IOT_STUDIO_STRICT") == "1":
+            raise BuildError(message)
+        warning(message)
+
+
 def compose(
     args: list[str],
     *,
@@ -476,6 +504,7 @@ def setup() -> None:
     clone_velxio()
     verify_velxio()
     rebrand_velxio()
+    agent_overlay()
     sync_qemu()
 
     compose(["build"])
@@ -495,6 +524,7 @@ def build(no_cache: bool = False) -> None:
     clone_velxio()
     verify_velxio()
     rebrand_velxio()
+    agent_overlay()
     validate_provider_assets()
     sync_qemu()
 
@@ -512,6 +542,7 @@ def prepare() -> None:
     clone_velxio()
     verify_velxio()
     rebrand_velxio()
+    agent_overlay()
     validate_provider_assets(allow_fetch=False)
     sync_qemu()
     success(f"Build context ready: {root() / VELXIO_DIR}")
@@ -529,6 +560,7 @@ def start() -> None:
     clone_velxio()
     verify_velxio()
     rebrand_velxio()
+    agent_overlay()
     validate_provider_assets()
     sync_qemu()
 
@@ -566,6 +598,7 @@ def qemu() -> None:
 
     verify_velxio()
     rebrand_velxio()
+    agent_overlay()
     sync_qemu()
 
 
@@ -730,6 +763,7 @@ def main() -> int:
             clone_velxio()
             verify_velxio()
             rebrand_velxio()
+            agent_overlay()
         elif command == "clean":
             clean(volumes=args.volumes)
         else:

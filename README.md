@@ -273,7 +273,18 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.4.0 — CI/CD image release (current)
+### v2.5.0-dev — AI agent, M0 (branch `agentic-iot-studio`, current)
+
+- New `overlay/` + `agent_patch.py`: copied into the Velxio tree after the
+  white-label step, with anchored hooks (`/api/agent` router, the agent panel
+  in the editor, unbuffered nginx location). `IOT_STUDIO_AGENT=0` builds
+  without it
+- M0 delivers the panel shell: provider picker (Anthropic, OpenAI, Gemini,
+  OpenRouter, Groq, Ollama Cloud, local Ollama, custom), model, base URL and
+  your own API key (browser-only), plus the SSRF-guarded `/api/agent/check-url`
+- Roadmap and decisions: `docs/AGENTIC-PLAN.md`
+
+### v2.4.0 — CI/CD image release
 
 - New GitHub Actions workflow (`.github/workflows/release-image.yml`): every
   push to `whitelabel-iot-studio` (plus a weekly rebuild and manual runs)

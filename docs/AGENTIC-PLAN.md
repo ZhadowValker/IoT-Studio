@@ -49,11 +49,23 @@ Decisions and why:
 2. **One typed tool registry, two front ends.** The same tool definitions
    power the in-app agent and (via a bridge WebSocket) external MCP clients,
    so Claude Code or Cursor can drive the open app too.
-3. **Provider-agnostic adapter.** One interface, adapters for Anthropic and
-   OpenAI-compatible endpoints (covers Ollama Cloud and local Ollama).
-4. **Human in the loop by default.** Read-only tools run freely; anything that
-   changes the project goes through a diff/approve step. A per-session "auto"
-   mode and an undo checkpoint before each agent turn.
+3. **Provider chosen in the UI (decided).** A provider picker in the agent
+   panel: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, Ollama Cloud,
+   local Ollama and any custom OpenAI-compatible endpoint. Two adapters cover
+   all of them (Anthropic Messages API; OpenAI-style chat completions with
+   tool calls); the rest are presets that only differ in base URL and model
+   list.
+4. **Bring your own key (decided).** The user enters the API key in the panel.
+   It is kept in the browser (session-only by default, "remember on this
+   device" optional) and sent per request to the backend proxy in a header.
+   The server never stores or logs it and has no key of its own. The proxy
+   refuses private / loopback / link-local base URLs (SSRF guard) unless the
+   deployer sets `IOT_AGENT_ALLOW_PRIVATE_URLS=1`, which local Ollama needs.
+5. **Auto-apply with undo (decided).** The agent edits the project directly.
+   Every agent turn starts with an automatic checkpoint (files, boards, parts,
+   wires); the panel shows each change as it happens and has one-click
+   "undo this turn" plus a per-step revert. Destructive actions the agent
+   cannot undo (there are none in the tool set) would still need approval.
 
 ## 4. Tool surface (v1)
 
@@ -65,6 +77,16 @@ Write: `write_file`, `edit_file` (patch), `add_component`, `connect_pins`,
 Act: `compile`, `run`, `stop`, `reset`, `wait_for_serial(pattern, timeout)`,
 `http_get_gateway(path)` (fetches the sketch's web page through
 `/api/gateway`), `press_button` / `set_input`.
+Linux boards (Raspberry Pi 3 variants): `terminal_send(text)`,
+`terminal_read(since?)`, so the agent can run shell commands and Python on
+the emulated Pi.
+
+**Every board family (decided).** Tools take a `board` argument and resolve
+the board kind at call time: AVR (Uno/Nano/Mega/ATtiny), ESP32 / S3 / C3,
+RP2040 / Pico / Pico W, STM32, Raspberry Pi 3, plus MicroPython mode. A
+capability table maps each kind to what it supports (compile target, serial
+vs terminal, WiFi/gateway, flashing path) and the agent prompt is generated
+from it, so a new board kind needs one table entry, not new tools.
 Meta: `ask_user`, `checkpoint`, `undo_to_checkpoint`.
 
 Tools return small structured results (errors summarised, serial truncated to
@@ -86,17 +108,17 @@ This repo does **not** contain Velxio's source; `build.py` clones it and
   - `backend/app/main.py`: `include_router(agent.router, prefix="/api/agent")`
   - `frontend/src/pages/EditorPage.tsx`: mount `<AgentPanel />`
   - `docker/nginx.conf`: disable buffering for `/api/agent/` (SSE)
-- Config through env: `IOT_AGENT_PROVIDER`, `IOT_AGENT_MODEL`,
-  `IOT_AGENT_API_KEY` (compose / `.env`, never baked into the image),
-  `IOT_AGENT_MAX_TOKENS_PER_DAY`. With no key set the panel shows setup help
-  and the app behaves exactly as today.
+- Config is in the panel (provider, model, base URL, key). The only server
+  settings are optional: `IOT_AGENT_ALLOW_PRIVATE_URLS=1` (local Ollama) and
+  `IOT_AGENT=off` to remove the feature. With no key entered the panel shows
+  setup help and the app behaves exactly as today.
 
 ## 6. Milestones
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Decisions below confirmed; `overlay/` + `apply_overlay()` + hook patches, empty panel renders in the built app | Image builds in CI; panel toggles; stock behaviour unchanged |
-| M1 | Tool registry + read-only tools; panel shows live project/serial through the tools | Unit tests for each tool against the stores |
+| M0 | `overlay/` + `apply_overlay()` + hook patches, empty panel renders in the built app | Image builds in CI; panel toggles; stock behaviour unchanged |
+| M1 | Tool registry + read-only tools + board capability table; panel shows live project/serial through the tools | Unit tests for each tool against the stores, across board kinds |
 | M2 | LLM proxy + loop + chat; read/write/compile/run tools; approval UI + undo | "Blink GPIO2 every second" works end to end on ESP32 |
 | M3 | Closed-loop skills: *build-and-verify* (compile → fix errors, ≤ N tries → run → `wait_for_serial` → check gateway page) and *circuit-from-description* | The DHT22 + PIR + LDR web-server sketch is produced from one prompt and its page loads |
 | M4 | Bridge for external MCP clients (pairing code per session) | Claude Code drives the open app and reads serial |
@@ -122,17 +144,17 @@ back to the release line only when M2 is solid.
   avoids importing Velxio internals beyond the stores and APIs listed above.
 - **Licence.** Velxio is AGPLv3 (plus commercial licence). The overlay is
   published under AGPLv3 with the rest of this repo; the NOTICE stays.
-- **Secrets.** Provider keys only via environment on the server; never in the
-  image, the repo, logs or the browser.
+- **Secrets.** The user's key lives only in their browser and in the request
+  header to the proxy; it is never written to disk, logs or the image, and the
+  proxy strips it from error output.
 
-## 8. Decisions needed before M0
+## 8. Decisions (confirmed)
 
-1. **LLM provider and model** for v1: Anthropic, an OpenAI-compatible
-   endpoint, or Ollama Cloud / local Ollama. The adapter makes this a config
-   choice, but the default affects prompts and tool-call format.
-2. **Who pays / where the key lives:** one server-side key from the deployer
-   (default in this plan) or bring-your-own-key entered in the UI.
-3. **v1 scope:** ESP32 + Arduino C++ first (our tested path), or also AVR /
-   Pico / MicroPython from the start.
-4. **Autonomy default:** approve every change (default) or auto-apply with
-   undo.
+1. **Provider:** selectable in the UI (section 3, item 3).
+2. **Key:** entered by the user, kept in the browser, proxied per request
+   (section 3, item 4).
+3. **Scope:** every board family, including Raspberry Pi variants.
+4. **Autonomy:** auto-apply with undo (section 3, item 5).
+
+Still open (defaults assumed, easy to change): the default model suggested
+per provider, and the daily token budget shown in the panel.

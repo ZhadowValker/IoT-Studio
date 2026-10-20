@@ -52,6 +52,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Agent overlay unit tests
+        run: |
+          pip install -q pytest fastapi pydantic httpx
+          cd overlay/backend && python -m pytest -q tests_agent
+
       - name: Prepare build context (clone Velxio, white-label, QEMU assets)
         run: python3 build.py prepare
 
