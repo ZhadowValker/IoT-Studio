@@ -68,6 +68,18 @@ export const PROVIDERS: ProviderPreset[] = [
     editableUrl: false,
   },
   {
+    id: 'nvidia',
+    label: 'NVIDIA (build.nvidia.com / NIM)',
+    format: 'openai',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    models: ['meta/llama-3.3-70b-instruct', 'meta/llama-3.1-405b-instruct'],
+    needsKey: true,
+    editableUrl: false,
+    hint:
+      'Key starts with nvapi-. Get one at build.nvidia.com. Pick a model that ' +
+      'supports tool calling; the model id is shown on its page.',
+  },
+  {
     id: 'ollama-cloud',
     label: 'Ollama Cloud',
     format: 'openai',
