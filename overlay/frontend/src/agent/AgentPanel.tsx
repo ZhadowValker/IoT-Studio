@@ -1,29 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PROVIDERS, getProvider } from './providers';
 import { clearKey, loadSettings, saveSettings, type AgentSettings } from './settings';
+import { setAgentOpen, useAgentOpen } from './agentUi';
 
-// IoT-Studio agent panel (M0): launcher, provider/key settings and the shell
+// IoT-Studio agent panel (M0): provider/key settings (opened from the toolbar
+// launcher, see AgentLauncher.tsx) and the shell
 // the chat loop plugs into in M2. Self-contained: it uses only design tokens.
 
 const accent = 'var(--color-accent-fg, #A70CFF)';
 const border = '1px solid var(--color-border-default, rgba(255,255,255,0.09))';
 
 const styles = {
-  launcher: {
-    position: 'fixed',
-    right: 16,
-    bottom: 16,
-    zIndex: 1200,
-    padding: '8px 14px',
-    borderRadius: 999,
-    border: `1px solid ${accent}`,
-    background: 'linear-gradient(135deg, #A70CFF 0%, #5a0a8c 100%)',
-    color: '#fff',
-    fontWeight: 600,
-    fontSize: 13,
-    cursor: 'pointer',
-    boxShadow: '0 4px 18px rgba(167,12,255,0.35)',
-  },
   panel: {
     position: 'fixed',
     top: 48,
@@ -88,7 +75,7 @@ const styles = {
 } as const satisfies Record<string, React.CSSProperties>;
 
 export function AgentPanel() {
-  const [open, setOpen] = useState(false);
+  const open = useAgentOpen();
   const [settings, setSettings] = useState<AgentSettings>(() => loadSettings());
   const [saved, setSaved] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -148,16 +135,6 @@ export function AgentPanel() {
 
   return (
     <>
-      <button
-        type="button"
-        style={styles.launcher}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        title="IoT-Studio AI agent"
-      >
-        {open ? 'Close agent' : 'AI agent'}
-      </button>
-
       {open && (
         <aside style={styles.panel} aria-label="IoT-Studio AI agent">
           <div style={styles.head}>
@@ -165,7 +142,7 @@ export function AgentPanel() {
             <button
               type="button"
               style={{ ...styles.btn, padding: '3px 8px' }}
-              onClick={() => setOpen(false)}
+              onClick={() => setAgentOpen(false)}
             >
               ✕
             </button>

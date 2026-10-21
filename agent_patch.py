@@ -64,6 +64,24 @@ def patch_hooks(tree: Path, rep: Report) -> None:
         "            <AgentPanel />\n",
         "agent: mount AgentPanel (EditorPage.tsx)",
     )
+    canvas = tree / "frontend" / "src" / "components" / "simulator" / "SimulatorCanvas.tsx"
+    replace_exact(
+        rep,
+        canvas,
+        "import { ComponentPickerModal } from '../ComponentPickerModal';\n",
+        "import { ComponentPickerModal } from '../ComponentPickerModal';\n"
+        "import { AgentLauncher } from '../../agent/AgentLauncher';\n",
+        "agent: import AgentLauncher (SimulatorCanvas.tsx)",
+    )
+    replace_exact(
+        rep,
+        canvas,
+        "                  {t('editor.canvas.add')}\n                </button>\n",
+        "                  {t('editor.canvas.add')}\n                </button>\n"
+        "\n                {/* IoT-Studio AI agent launcher, next to Add */}\n"
+        "                <AgentLauncher />\n",
+        "agent: launcher next to Add (SimulatorCanvas.tsx)",
+    )
     replace_exact(
         rep,
         tree / "docker" / "nginx.conf",
