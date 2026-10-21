@@ -25,7 +25,7 @@ router = APIRouter()
 async def status() -> dict:
     return {
         "enabled": os.environ.get("IOT_AGENT", "on") != "off",
-        "milestone": "M2",
+        "milestone": "M3",
         "allow_private_urls": os.environ.get("IOT_AGENT_ALLOW_PRIVATE_URLS", "") == "1",
     }
 

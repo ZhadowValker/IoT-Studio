@@ -10,6 +10,7 @@ import { hasEditorCommand, runEditorCommand } from '../lib/editorCommands';
 import { getTabSessionId } from '../simulation/Esp32Bridge';
 import { BOARD_KIND_LABELS } from '../types/board';
 import type { ToolSpec } from './llmClient';
+import { CIRCUIT_TOOLS } from './circuitTools';
 
 export interface Tool extends ToolSpec {
   /** True when the tool changes the project (shown differently in the UI). */
@@ -53,11 +54,16 @@ function resolveBoard(boardId?: string) {
 export interface Checkpoint {
   groupId: string;
   files: { id: string; name: string; content: string }[];
+  components: ReturnType<typeof useSimulatorStore.getState>['components'];
+  wires: ReturnType<typeof useSimulatorStore.getState>['wires'];
 }
 
 export function takeCheckpoint(): Checkpoint {
   const e = useEditorStore.getState();
+  const sim = useSimulatorStore.getState();
   return {
+    components: sim.components.map((c) => ({ ...c, properties: { ...c.properties } })),
+    wires: sim.wires.map((w) => ({ ...w })),
     groupId: e.activeGroupId,
     files: (e.fileGroups[e.activeGroupId] ?? e.files).map((f) => ({
       id: f.id,
@@ -68,6 +74,12 @@ export function takeCheckpoint(): Checkpoint {
 }
 
 export function restoreCheckpoint(cp: Checkpoint): void {
+  const sim = useSimulatorStore.getState();
+  if (sim.boards.every((b) => !b.running)) {
+    sim.setComponents(cp.components);
+    sim.setWires(cp.wires);
+    useSimulatorStore.getState().recalculateAllWirePositions();
+  }
   const store = useEditorStore.getState();
   if (store.activeGroupId !== cp.groupId) store.setActiveGroup(cp.groupId);
   const current = useEditorStore.getState().fileGroups[cp.groupId] ?? [];
@@ -128,7 +140,7 @@ const boardArg = {
   board: { type: 'string', description: 'Board id (default: the active board).' },
 };
 
-export const TOOLS: Tool[] = [
+const BASE_TOOLS: Tool[] = [
   {
     name: 'get_project',
     description:
@@ -362,6 +374,8 @@ export const TOOLS: Tool[] = [
     },
   },
 ];
+
+export const TOOLS: Tool[] = [...BASE_TOOLS, ...CIRCUIT_TOOLS];
 
 export const TOOL_SPECS: ToolSpec[] = TOOLS.map(({ name, description, parameters }) => ({
   name,
