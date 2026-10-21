@@ -210,16 +210,26 @@ export function AgentPanel() {
     }
   };
 
-  const undoTurn = () => {
+  const undoTurn = async () => {
     const cp = checkpoints[checkpoints.length - 1];
     if (!cp || busy) return;
-    restoreCheckpoint(cp);
+    setBusy(true);
+    let notes: string[] = [];
+    try {
+      notes = await restoreCheckpoint(cp);
+    } finally {
+      setBusy(false);
+    }
     setCheckpoints((c) => c.slice(0, -1));
+    const extra = notes.length ? ' ' + notes.join(' ') : '';
     history.current.push({
       role: 'user',
-      content: '[The user undid your last turn. The project files were restored to how they were before it.]',
+      content:
+        '[The user undid your last turn. The project files, parts and wires were restored to how they were before it.' +
+        extra +
+        ']',
     });
-    push({ kind: 'note', text: 'Last turn undone: project files restored.' });
+    push({ kind: 'note', text: 'Last turn undone: files, parts and wires restored.' + extra });
   };
 
   const newChat = () => {

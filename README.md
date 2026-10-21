@@ -273,6 +273,9 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.12.0-dev — undo covers the simulation
+- **Undo turn** now also handles the simulation side: a board the turn started or rebuilt is stopped, its earlier compiled program and serial log come back, and the agent is told what could not be put back exactly (for example a board that was running before: press Run). Previously undo silently skipped parts and wires if a board was running; it now stops the board first.
+
 ### v2.11.0-dev — no-overlap placement
 - `add_component` now places each part in free space beside the board, on the side of the pin it will connect to (`near_pin`) or a chosen `side`. Sizes come from what is actually painted (some parts, like the DHT sensors, paint far outside their element box), so parts no longer land on top of each other. The idea follows velxio-agentic's canvas layout engine.
 

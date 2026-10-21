@@ -14,6 +14,7 @@ import { CIRCUIT_TOOLS } from './circuitTools';
 import { INPUT_TOOLS } from './inputTools';
 import { BOARD_TOOLS } from './boardTools';
 import { PI_TOOLS } from './piTools';
+import { planSimRestore, type BoardSnap } from './simRestore';
 
 export interface Tool extends ToolSpec {
   /** True when the tool changes the project (shown differently in the UI). */
@@ -59,6 +60,7 @@ export interface Checkpoint {
   files: { id: string; name: string; content: string }[];
   components: ReturnType<typeof useSimulatorStore.getState>['components'];
   wires: ReturnType<typeof useSimulatorStore.getState>['wires'];
+  boards: BoardSnap[];
 }
 
 export function takeCheckpoint(): Checkpoint {
@@ -67,6 +69,7 @@ export function takeCheckpoint(): Checkpoint {
   return {
     components: sim.components.map((c) => ({ ...c, properties: { ...c.properties } })),
     wires: sim.wires.map((w) => ({ ...w })),
+    boards: sim.boards.map((b) => ({ id: b.id, running: b.running, serial: b.serialOutput ?? '', program: b.compiledProgram })),
     groupId: e.activeGroupId,
     files: (e.fileGroups[e.activeGroupId] ?? e.files).map((f) => ({
       id: f.id,
@@ -76,13 +79,53 @@ export function takeCheckpoint(): Checkpoint {
   };
 }
 
-export function restoreCheckpoint(cp: Checkpoint): void {
-  const sim = useSimulatorStore.getState();
-  if (sim.boards.every((b) => !b.running)) {
+/** Put the project back as it was before a turn: files, parts, wires and the
+ *  simulation side (a board the turn started or rebuilt is stopped, its earlier
+ *  compiled program and serial log come back). Returns plain-language notes
+ *  about anything that could not be put back exactly. */
+export async function restoreCheckpoint(cp: Checkpoint): Promise<string[]> {
+  const sim0 = useSimulatorStore.getState();
+  const label = (id: string) => {
+    const b = sim0.boards.find((x) => x.id === id);
+    return b ? (BOARD_KIND_LABELS[b.boardKind] ?? id) : id;
+  };
+  const plan = planSimRestore(
+    cp.boards,
+    sim0.boards.map((b) => ({ id: b.id, running: b.running, serial: b.serialOutput ?? '', program: b.compiledProgram })),
+    label,
+  );
+  const notes = [...plan.notes];
+
+  // The circuit cannot be edited while a board runs, so stop first.
+  if (plan.stopFirst || sim0.boards.some((b) => b.running)) {
+    if (hasEditorCommand('sim.stop')) runEditorCommand('sim.stop');
+    for (let i = 0; i < 40 && useSimulatorStore.getState().boards.some((b) => b.running); i++) await sleep(150);
+    if (useSimulatorStore.getState().boards.some((b) => b.running)) {
+      notes.push('A board is still running, so the circuit (parts and wires) was left as it is. Stop it and undo again.');
+    }
+  }
+  if (useSimulatorStore.getState().boards.every((b) => !b.running)) {
+    const sim = useSimulatorStore.getState();
     sim.setComponents(cp.components);
     sim.setWires(cp.wires);
     useSimulatorStore.getState().recalculateAllWirePositions();
   }
+  if (plan.restore.length) {
+    const snap = new Map(cp.boards.map((b) => [b.id, b]));
+    useSimulatorStore.setState((s) => {
+      const boards = s.boards.map((b) =>
+        plan.restore.includes(b.id) && !b.running
+          ? { ...b, serialOutput: snap.get(b.id)!.serial, compiledProgram: snap.get(b.id)!.program as typeof b.compiledProgram }
+          : b,
+      );
+      const aid = s.activeBoardId ?? '';
+      const active = snap.get(aid);
+      return plan.restore.includes(aid) && active && !boards.find((x) => x.id === aid)?.running
+        ? { boards, serialOutput: active.serial }
+        : { boards };
+    });
+  }
+
   const store = useEditorStore.getState();
   if (store.activeGroupId !== cp.groupId) store.setActiveGroup(cp.groupId);
   const current = useEditorStore.getState().fileGroups[cp.groupId] ?? [];
@@ -100,6 +143,7 @@ export function restoreCheckpoint(cp: Checkpoint): void {
       }
     }
   }
+  return notes;
 }
 
 // ── compile helper ───────────────────────────────────────────────────────────
