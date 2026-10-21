@@ -13,7 +13,7 @@ It is never stored or logged, and is scrubbed from any error text.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -217,6 +217,149 @@ async def complete(req: dict, api_key: str, client: httpx.AsyncClient | None = N
         return parse(resp.json())
     except Exception as exc:  # malformed provider reply
         raise LlmError("The provider returned an unexpected response", 502) from exc
+
+
+# ── streaming ────────────────────────────────────────────────────────────────
+
+
+class _OpenAIStream:
+    """Folds chat-completions SSE chunks into one neutral reply."""
+
+    def __init__(self) -> None:
+        self.text: list[str] = []
+        self.calls: dict[int, dict] = {}
+        self.finish: str | None = None
+        self.usage = {"input": 0, "output": 0}
+
+    def feed(self, data: dict) -> str:
+        u = data.get("usage")
+        if u:
+            self.usage = {"input": u.get("prompt_tokens", 0), "output": u.get("completion_tokens", 0)}
+        choice = (data.get("choices") or [{}])[0]
+        if choice.get("finish_reason"):
+            self.finish = choice["finish_reason"]
+        delta = choice.get("delta") or {}
+        for tc in delta.get("tool_calls") or []:
+            slot = self.calls.setdefault(tc.get("index", 0), {"id": "", "name": "", "arguments": ""})
+            if tc.get("id"):
+                slot["id"] = tc["id"]
+            fn = tc.get("function") or {}
+            if fn.get("name"):
+                slot["name"] += fn["name"]
+            if fn.get("arguments"):
+                slot["arguments"] += fn["arguments"]
+        piece = delta.get("content") or ""
+        if piece:
+            self.text.append(piece)
+        return piece
+
+    def reply(self) -> dict:
+        calls = []
+        for i in sorted(self.calls):
+            c = self.calls[i]
+            calls.append({"id": c["id"] or f"call_{i}", "name": c["name"], "arguments": c["arguments"] or "{}"})
+        return {"content": "".join(self.text), "tool_calls": calls,
+                "finish_reason": self.finish, "usage": self.usage}
+
+
+class _AnthropicStream:
+    """Folds Messages API SSE events into one neutral reply."""
+
+    def __init__(self) -> None:
+        self.text: list[str] = []
+        self.blocks: dict[int, dict] = {}
+        self.finish: str | None = None
+        self.usage = {"input": 0, "output": 0}
+
+    def feed(self, data: dict) -> str:
+        t = data.get("type")
+        if t == "message_start":
+            u = (data.get("message") or {}).get("usage") or {}
+            self.usage["input"] = u.get("input_tokens", 0)
+        elif t == "content_block_start":
+            blk = data.get("content_block") or {}
+            if blk.get("type") == "tool_use":
+                self.blocks[data.get("index", 0)] = {"id": blk.get("id", ""), "name": blk.get("name", ""), "arguments": ""}
+        elif t == "content_block_delta":
+            d = data.get("delta") or {}
+            if d.get("type") == "text_delta":
+                self.text.append(d.get("text", ""))
+                return d.get("text", "")
+            if d.get("type") == "input_json_delta":
+                b = self.blocks.get(data.get("index", 0))
+                if b is not None:
+                    b["arguments"] += d.get("partial_json", "")
+        elif t == "message_delta":
+            self.finish = (data.get("delta") or {}).get("stop_reason") or self.finish
+            self.usage["output"] = (data.get("usage") or {}).get("output_tokens", self.usage["output"])
+        return ""
+
+    def reply(self) -> dict:
+        calls = [{"id": b["id"], "name": b["name"], "arguments": b["arguments"] or "{}"}
+                 for _, b in sorted(self.blocks.items())]
+        return {"content": "".join(self.text), "tool_calls": calls,
+                "finish_reason": self.finish, "usage": self.usage}
+
+
+async def stream_complete(req: dict, api_key: str) -> AsyncIterator[dict]:
+    """One model turn as events: {"t":"text","d":..} ... then {"t":"done","reply":{..}}
+    or {"t":"error","message":..,"status":..}. Never raises; errors are key-free."""
+    fmt = req.get("format", "openai")
+    try:
+        if fmt not in ("openai", "anthropic"):
+            raise LlmError("Unknown provider format", 400)
+        if not req.get("model"):
+            raise LlmError("Choose a model first", 400)
+        try:
+            base = validate_base_url(req.get("base_url", ""))
+        except UnsafeUrl as exc:
+            raise LlmError(str(exc), 400) from exc
+        if fmt == "anthropic":
+            url = f"{base}/v1/messages"
+            headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION,
+                       "content-type": "application/json"}
+            payload = {**to_anthropic_payload(req), "stream": True}
+            acc: Any = _AnthropicStream()
+        else:
+            url = f"{base}/chat/completions"
+            headers = {"content-type": "application/json"}
+            if api_key:
+                headers["authorization"] = f"Bearer {api_key}"
+            payload = {**to_openai_payload(req), "stream": True}
+            acc = _OpenAIStream()
+
+        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=False) as client:
+            try:
+                async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                    if resp.status_code >= 400:
+                        detail = scrub((await resp.aread()).decode("utf-8", "replace"), api_key)
+                        hint = {401: "The API key was rejected.", 403: "The API key is not allowed to do this.",
+                                404: "Model or endpoint not found - check the model id and base URL.",
+                                429: "Rate limit or quota reached."}.get(resp.status_code, "")
+                        raise LlmError(f"Provider error {resp.status_code}. {hint} {detail}".strip(),
+                                       resp.status_code if resp.status_code in (400, 401, 403, 404, 429) else 502)
+                    async for line in resp.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        body = line[5:].strip()
+                        if not body or body == "[DONE]":
+                            continue
+                        try:
+                            piece = acc.feed(json.loads(body))
+                        except json.JSONDecodeError:
+                            continue
+                        if piece:
+                            yield {"t": "text", "d": piece}
+            except httpx.TimeoutException as exc:
+                raise LlmError("The model provider timed out", 504) from exc
+            except httpx.HTTPError as exc:
+                raise LlmError(scrub(f"Could not reach the provider: {exc}", api_key), 502) from exc
+        yield {"t": "done", "reply": acc.reply()}
+    except LlmError as exc:
+        yield {"t": "error", "message": exc.message, "status": exc.status}
+    except Exception:  # never leak internals or the key
+        yield {"t": "error", "message": "The model stream failed unexpectedly", "status": 502}
 
 
 async def list_models(req: dict, api_key: str, client: httpx.AsyncClient | None = None) -> list[str]:

@@ -11,7 +11,9 @@ import os
 from typing import Any
 
 from fastapi import APIRouter, Header
-from fastapi.responses import JSONResponse
+import json
+
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.agent import llm
@@ -25,7 +27,7 @@ router = APIRouter()
 async def status() -> dict:
     return {
         "enabled": os.environ.get("IOT_AGENT", "on") != "off",
-        "milestone": "M3",
+        "milestone": "M5",
         "allow_private_urls": os.environ.get("IOT_AGENT_ALLOW_PRIVATE_URLS", "") == "1",
     }
 
@@ -61,6 +63,20 @@ async def llm_turn(body: LlmRequest, x_agent_key: str = Header(default="")) -> J
     except llm.LlmError as exc:
         return JSONResponse({"error": exc.message}, status_code=exc.status)
     return JSONResponse(result)
+
+
+@router.post("/llm/stream")
+async def llm_stream(body: LlmRequest, x_agent_key: str = Header(default="")) -> StreamingResponse:
+    """Same as /llm but newline-delimited JSON events as the model writes."""
+
+    async def gen():
+        async for ev in llm.stream_complete(body.model_dump(), x_agent_key):
+            yield json.dumps(ev) + "\n"
+
+    return StreamingResponse(
+        gen(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class ModelsRequest(BaseModel):

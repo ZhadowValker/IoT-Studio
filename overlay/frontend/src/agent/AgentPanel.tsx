@@ -153,6 +153,7 @@ export function AgentPanel() {
   const abortRef = useRef<AbortController | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const idRef = useRef(0);
+  const liveRef = useRef<number | null>(null); // id of the bot bubble being streamed
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
@@ -165,7 +166,24 @@ export function AgentPanel() {
 
   const onEvent = useCallback(
     (e: AgentEvent) => {
-      if (e.type === 'assistant') push({ kind: 'bot', text: e.text });
+      if (e.type === 'delta') {
+        if (liveRef.current === null) {
+          idRef.current += 1;
+          liveRef.current = idRef.current;
+          const id = idRef.current;
+          setItems((cur) => [...cur, { kind: 'bot', text: e.text, id } as ChatItem]);
+        } else {
+          const id = liveRef.current;
+          setItems((cur) =>
+            cur.map((it) => (it.id === id && it.kind === 'bot' ? { ...it, text: it.text + e.text } : it)),
+          );
+        }
+      } else if (e.type === 'assistant') {
+        const id = liveRef.current;
+        liveRef.current = null;
+        if (id === null) push({ kind: 'bot', text: e.text });
+        else setItems((cur) => cur.map((it) => (it.id === id && it.kind === 'bot' ? { ...it, text: e.text } : it)));
+      }
       else if (e.type === 'error') push({ kind: 'err', text: e.text });
       else if (e.type === 'usage') setUsage({ input: e.input, output: e.output, steps: e.steps });
       else if (e.type === 'tool')
@@ -186,6 +204,7 @@ export function AgentPanel() {
     try {
       await runTurn({ settings, history: history.current, userText: text, onEvent, signal: ctl.signal });
     } finally {
+      liveRef.current = null;
       setBusy(false);
       abortRef.current = null;
     }

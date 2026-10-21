@@ -2,7 +2,7 @@
 // until the model answers without calling a tool. Runs in the browser, next
 // to the live simulator state (see docs/AGENTIC-PLAN.md).
 
-import { callLlm, type ChatMessage, type ToolCall } from './llmClient';
+import { callLlmStream, type ChatMessage, type ToolCall } from './llmClient';
 import type { AgentSettings } from './settings';
 import { TOOL_SPECS, findTool } from './tools';
 
@@ -11,6 +11,7 @@ const MAX_RESULT_CHARS = 6000;
 const MAX_HISTORY_CHARS = 120_000;
 
 export type AgentEvent =
+  | { type: 'delta'; text: string }
   | { type: 'assistant'; text: string }
   | { type: 'tool'; id: string; name: string; args: string; writes: boolean; result: string; ok: boolean }
   | { type: 'usage'; input: number; output: number; steps: number }
@@ -73,7 +74,14 @@ export async function runTurn(opts: TurnOptions): Promise<void> {
     trimHistory(history);
     let reply;
     try {
-      reply = await callLlm(settings, SYSTEM_PROMPT, history, TOOL_SPECS, signal);
+      reply = await callLlmStream(
+        settings,
+        SYSTEM_PROMPT,
+        history,
+        TOOL_SPECS,
+        (d) => onEvent({ type: 'delta', text: d }),
+        signal,
+      );
     } catch (e) {
       if ((e as Error).name === 'AbortError') return;
       onEvent({ type: 'error', text: (e as Error).message });

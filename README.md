@@ -273,6 +273,9 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.8.0-dev — streaming replies
+- The agent's text now appears word by word as the model writes it (OpenAI-compatible providers incl. NVIDIA, and Anthropic). New `/api/agent/llm/stream` endpoint (newline-delimited JSON); the panel falls back to the one-shot call if the stream is unavailable.
+
 ### v2.7.0-dev — agent input tools
 - New agent tools: `list_controls`, `set_sensor` (temperature, humidity, distance, light... clamped to range), `press_button`, `set_input` (knobs and switches). The agent can now test its own circuit while it runs and check the result in the serial output.
 
