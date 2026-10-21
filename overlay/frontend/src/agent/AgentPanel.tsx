@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PROVIDERS, getProvider } from './providers';
 import { clearKey, loadSettings, saveSettings, type AgentSettings } from './settings';
 import { setAgentOpen, useAgentOpen } from './agentUi';
-import { callLlm, type ChatMessage } from './llmClient';
+import { callLlm, fetchModels, type ChatMessage } from './llmClient';
 import { runTurn, type AgentEvent } from './loop';
 import { restoreCheckpoint, takeCheckpoint, type Checkpoint } from './tools';
 
@@ -136,6 +136,7 @@ export function AgentPanel() {
   const [busy, setBusy] = useState(false);
   const [usage, setUsage] = useState<{ input: number; output: number; steps: number } | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [fetched, setFetched] = useState<string[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const history = useRef<ChatMessage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -197,6 +198,17 @@ export function AgentPanel() {
     setItems([]);
     setUsage(null);
     setCheckpoints([]);
+  };
+
+  const loadModels = async () => {
+    setTestMsg('Loading models…');
+    try {
+      const ids = await fetchModels(settings);
+      setFetched(ids);
+      setTestMsg(`${ids.length} chat models found. Start typing in Model to pick one.`);
+    } catch (e) {
+      setTestMsg(`Failed: ${(e as Error).message}`);
+    }
   };
 
   const testConnection = async () => {
@@ -393,7 +405,7 @@ export function AgentPanel() {
                 onChange={(e) => update({ model: e.target.value })}
               />
               <datalist id="iot-agent-models">
-                {provider.models.map((m) => (
+                {[...new Set([...provider.models, ...fetched])].map((m) => (
                   <option key={m} value={m} />
                 ))}
               </datalist>
@@ -453,6 +465,9 @@ export function AgentPanel() {
               </button>
               <button type="button" style={styles.btn} onClick={() => void testConnection()}>
                 Test
+              </button>
+              <button type="button" style={styles.btn} onClick={() => void loadModels()}>
+                Models
               </button>
               {saved && <span style={{ alignSelf: 'center', color: accent }}>Saved</span>}
             </div>

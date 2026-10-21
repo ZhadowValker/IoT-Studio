@@ -61,3 +61,18 @@ async def llm_turn(body: LlmRequest, x_agent_key: str = Header(default="")) -> J
     except llm.LlmError as exc:
         return JSONResponse({"error": exc.message}, status_code=exc.status)
     return JSONResponse(result)
+
+
+class ModelsRequest(BaseModel):
+    format: str = "openai"
+    base_url: str
+
+
+@router.post("/models")
+async def list_models(body: ModelsRequest, x_agent_key: str = Header(default="")) -> JSONResponse:
+    """Lists the provider's model ids so the panel can offer real choices."""
+    try:
+        ids = await llm.list_models(body.model_dump(), x_agent_key)
+    except llm.LlmError as exc:
+        return JSONResponse({"error": exc.message}, status_code=exc.status)
+    return JSONResponse({"models": ids})

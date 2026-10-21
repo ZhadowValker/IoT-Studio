@@ -217,3 +217,35 @@ async def complete(req: dict, api_key: str, client: httpx.AsyncClient | None = N
         return parse(resp.json())
     except Exception as exc:  # malformed provider reply
         raise LlmError("The provider returned an unexpected response", 502) from exc
+
+
+async def list_models(req: dict, api_key: str, client: httpx.AsyncClient | None = None) -> list[str]:
+    """Model ids the provider offers (GET /models). Key-free errors."""
+    fmt = req.get("format", "openai")
+    try:
+        base = validate_base_url(req.get("base_url", ""))
+    except UnsafeUrl as exc:
+        raise LlmError(str(exc), 400) from exc
+    if fmt == "anthropic":
+        url = f"{base}/v1/models?limit=100"
+        headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION}
+    else:
+        url = f"{base}/models"
+        headers = {"authorization": f"Bearer {api_key}"} if api_key else {}
+    own = client is None
+    client = client or httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=False)
+    try:
+        resp = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise LlmError(scrub(f"Could not reach the provider: {exc}", api_key), 502) from exc
+    finally:
+        if own:
+            await client.aclose()
+    if resp.status_code >= 400:
+        raise LlmError(f"Provider error {resp.status_code}. {scrub(resp.text, api_key)}",
+                       resp.status_code if resp.status_code in (400, 401, 403, 404, 429) else 502)
+    try:
+        items = resp.json().get("data") or []
+        return sorted({str(i.get("id")) for i in items if i.get("id")})
+    except Exception as exc:
+        raise LlmError("The provider returned an unexpected model list", 502) from exc

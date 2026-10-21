@@ -78,3 +78,14 @@ def test_private_url_refused(monkeypatch):
     with pytest.raises(llm.LlmError):
         _run({"format": "openai", "base_url": "http://127.0.0.1:1", "model": "m", "messages": []}, "k",
              lambda r: httpx.Response(200, json={}))
+
+
+def test_list_models_sorted_and_key_scrubbed():
+    def ok(request):
+        assert request.headers.get("authorization") == "Bearer SECRET"
+        return httpx.Response(200, json={"data": [{"id": "b/model"}, {"id": "a/model"}, {"id": "a/model"}]})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(ok)) as c:
+            return await llm.list_models({"format": "openai", "base_url": "https://8.8.8.8/v1"}, "SECRET", client=c)
+    assert asyncio.run(go()) == ["a/model", "b/model"]

@@ -141,6 +141,44 @@ back to the release line only when M2 is solid.
   tools, streaming replies, board capability table in the prompt.
 - **Next:** M3 build-and-verify skills and circuit-from-description.
 
+## 6b. Prior art: `ZhadowValker/velxio-agentic`
+
+An earlier agent built on an older, pre-OSS-split Velxio fork (SoundMind).
+Reviewed 2026-10-21; what we can and cannot use:
+
+**Different architecture, so not adopted as is**
+- The agent loop runs on the **server** (pydantic-ai, `backend/app/agent/agent.py`
+  ~2,000 lines), with a per-user **database** (SQLAlchemy sessions, events,
+  snapshots) and server-held provider keys. Our OSS image has no accounts or
+  database, and the decision is that users bring their own key. The loop stays
+  in the browser here.
+- Its frontend actions (`agentFrontendActions.ts`) call store methods that only
+  exist in that fork (`useCompilationStore`, `serialWriteToBoard`, ...).
+
+**Worth porting (circuit tools, our M3)**
+1. `canvasLayoutEngine.ts` (placement, auto-routing, spatial context). It needs
+   two more fork files that upstream lacks: `wireObstacleRouter.ts` and
+   `componentResolver.ts`; all three are self-contained utilities.
+2. The tool design: batch tools (`add_component_batch`, `connect_pins_batch`,
+   `route_wire_batch`), `get_canvas_runtime_pins` (real pin names from the DOM),
+   `suggest_placement`, `validate_pin_mapping`.
+3. The prompt rules, adapted: never invent coordinates, never hand-compute
+   waypoints, always read pin names before wiring, validate before finishing,
+   wire colour by signal type. Our upstream wire types are `power-vcc`,
+   `power-gnd`, `analog`, `digital`, `pwm`, `i2c`, `spi`, `usart` (not the
+   fork's `power`/`ground`/`i2c-data`...), so the mapping table is rewritten.
+4. Plan/todo UI ideas (`usePlanApprovalStore`, `useTodoStore`) for longer jobs.
+5. Event/trace rendering (`convertTraceToMessages.ts`) if we add streaming.
+
+**Skip:** `llm_providers.py` / `llm_connector.py` (server-key model),
+`sessions.py` + models (database), `snapshot_ops.py` / `snapshot_compat.py`
+(server-side snapshot model; our tools write the live stores directly).
+
+Order of work for M3: (a) port the three layout utilities into `overlay/` and
+adapt imports; (b) `search_components`, `get_component_pins`, `add_components`,
+`connect_pins`, `auto_layout`, `validate_circuit` tools on the live stores;
+(c) extend checkpoints to components and wires; (d) prompt rules above.
+
 ## 7. Risks and safeguards
 
 - **Prompt injection.** Serial output, the gateway page, library docs and

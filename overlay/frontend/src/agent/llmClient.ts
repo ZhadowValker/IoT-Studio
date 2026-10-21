@@ -77,3 +77,27 @@ export async function callLlm(
   }
   return body as LlmReply;
 }
+
+/** Chat-capable model ids only: reranker, embedding, guard, speech and image
+ *  models answer 404 on chat completions, which is easy to pick by mistake. */
+const NOT_CHAT = /(rerank|embed|retriev|guard|reward|safety|parakeet|riva|whisper|tts|asr|clip|diffus|sdxl|image|vision-only|nv-)/i;
+
+export async function fetchModels(settings: AgentSettings): Promise<string[]> {
+  const provider = getProvider(settings.providerId);
+  const baseUrl = (provider.editableUrl ? settings.baseUrl : provider.baseUrl).trim();
+  if (!baseUrl) throw new LlmClientError('Enter the provider base URL first.');
+  if (provider.needsKey && !settings.apiKey.trim()) throw new LlmClientError('Enter your API key first.');
+  const res = await fetch('/api/agent/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Agent-Key': settings.apiKey.trim() },
+    body: JSON.stringify({ format: provider.format, base_url: baseUrl }),
+  });
+  let body: { models?: string[]; error?: string } | null = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok || !body?.models) throw new LlmClientError(body?.error ?? `Model list failed (${res.status}).`);
+  return body.models.filter((m) => !NOT_CHAT.test(m));
+}

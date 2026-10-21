@@ -76,8 +76,9 @@ export const PROVIDERS: ProviderPreset[] = [
     needsKey: true,
     editableUrl: false,
     hint:
-      'Key starts with nvapi-. Get one at build.nvidia.com. Pick a model that ' +
-      'supports tool calling; the model id is shown on its page.',
+      'Key starts with nvapi-. Use a CHAT model that supports tool calling ' +
+      '(for example meta/llama-3.3-70b-instruct). Rerank, embedding and guard ' +
+      'models will fail with 404. Press Models to list what your key can use.',
   },
   {
     id: 'ollama-cloud',
