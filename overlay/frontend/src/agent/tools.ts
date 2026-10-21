@@ -11,6 +11,7 @@ import { getTabSessionId } from '../simulation/Esp32Bridge';
 import { BOARD_KIND_LABELS } from '../types/board';
 import type { ToolSpec } from './llmClient';
 import { CIRCUIT_TOOLS } from './circuitTools';
+import { INPUT_TOOLS } from './inputTools';
 
 export interface Tool extends ToolSpec {
   /** True when the tool changes the project (shown differently in the UI). */
@@ -375,7 +376,7 @@ const BASE_TOOLS: Tool[] = [
   },
 ];
 
-export const TOOLS: Tool[] = [...BASE_TOOLS, ...CIRCUIT_TOOLS];
+export const TOOLS: Tool[] = [...BASE_TOOLS, ...CIRCUIT_TOOLS, ...INPUT_TOOLS];
 
 export const TOOL_SPECS: ToolSpec[] = TOOLS.map(({ name, description, parameters }) => ({
   name,
