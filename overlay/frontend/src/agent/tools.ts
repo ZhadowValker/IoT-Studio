@@ -13,6 +13,7 @@ import type { ToolSpec } from './llmClient';
 import { CIRCUIT_TOOLS } from './circuitTools';
 import { INPUT_TOOLS } from './inputTools';
 import { BOARD_TOOLS } from './boardTools';
+import { PI_TOOLS } from './piTools';
 
 export interface Tool extends ToolSpec {
   /** True when the tool changes the project (shown differently in the UI). */
@@ -242,7 +243,8 @@ const BASE_TOOLS: Tool[] = [
   {
     name: 'run',
     description:
-      'Start the simulation of the active board with the last compiled program (compile first).',
+      'Start the simulation of the active board with the last compiled program (compile first). ' +
+      'Raspberry Pi boards need no compile: run boots Linux and starts the project script.',
     writes: true,
     parameters: { type: 'object', properties: {} },
     async run(_a, signal) {
@@ -377,7 +379,7 @@ const BASE_TOOLS: Tool[] = [
   },
 ];
 
-export const TOOLS: Tool[] = [...BASE_TOOLS, ...CIRCUIT_TOOLS, ...INPUT_TOOLS, ...BOARD_TOOLS];
+export const TOOLS: Tool[] = [...BASE_TOOLS, ...CIRCUIT_TOOLS, ...INPUT_TOOLS, ...BOARD_TOOLS, ...PI_TOOLS];
 
 export const TOOL_SPECS: ToolSpec[] = TOOLS.map(({ name, description, parameters }) => ({
   name,

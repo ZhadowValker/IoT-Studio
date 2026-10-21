@@ -273,6 +273,9 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.10.0-dev — Raspberry Pi tools
+- New agent tools for the Raspberry Pi boards: `pi_wait_boot`, `pi_run` (one-line shell command, returns output and exit code; interrupts the running script first) and `pi_write_file`. Not applicable on other boards.
+
 ### v2.9.0-dev — board knowledge
 - New agent tool `get_board_info`: chip family, logic voltage, WiFi support, analog inputs, supported languages, build target and the real I2C/SPI/UART pins of each board (read from the simulator's own pin classifier). The agent consults it before choosing pins and won't promise WiFi on an Uno.
 
