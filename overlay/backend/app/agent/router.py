@@ -8,8 +8,13 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from typing import Any
+
+from fastapi import APIRouter, Header
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from app.agent import llm
 
 from app.agent.net import UnsafeUrl, validate_base_url
 
@@ -20,7 +25,7 @@ router = APIRouter()
 async def status() -> dict:
     return {
         "enabled": os.environ.get("IOT_AGENT", "on") != "off",
-        "milestone": "M0",
+        "milestone": "M2",
         "allow_private_urls": os.environ.get("IOT_AGENT_ALLOW_PRIVATE_URLS", "") == "1",
     }
 
@@ -36,3 +41,23 @@ async def check_url(body: UrlCheck) -> dict:
         return {"ok": True, "base_url": validate_base_url(body.base_url)}
     except UnsafeUrl as exc:
         return {"ok": False, "error": str(exc)}
+
+
+class LlmRequest(BaseModel):
+    format: str = "openai"
+    base_url: str
+    model: str
+    system: str = ""
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    max_tokens: int = Field(default=4096, ge=1, le=16000)
+
+
+@router.post("/llm")
+async def llm_turn(body: LlmRequest, x_agent_key: str = Header(default="")) -> JSONResponse:
+    """One model turn. The user's key comes only from the X-Agent-Key header."""
+    try:
+        result = await llm.complete(body.model_dump(), x_agent_key)
+    except llm.LlmError as exc:
+        return JSONResponse({"error": exc.message}, status_code=exc.status)
+    return JSONResponse(result)

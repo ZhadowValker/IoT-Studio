@@ -128,6 +128,19 @@ This repo does **not** contain Velxio's source; `build.py` clones it and
 Each milestone is a separate PR into `agentic-iot-studio`; the branch merges
 back to the release line only when M2 is solid.
 
+## 6a. Status
+
+- **M0 done:** overlay, hooks, panel, provider/key settings, URL guard.
+- **M1/M2 mostly done (code + run loop):** tool registry, LLM proxy
+  (Anthropic + OpenAI-compatible), chat UI, per-turn checkpoint with undo of
+  project files, test-connection. Verified in a browser against a scripted
+  mock model (tool calls, file edit, undo) and by unit tests for the proxy.
+  **Not yet verified against a real model or a real compile/run.**
+- **Still to do from M1/M2:** circuit tools (add/wire/remove parts, sensor
+  values, button presses), checkpoint of circuit state, Raspberry Pi terminal
+  tools, streaming replies, board capability table in the prompt.
+- **Next:** M3 build-and-verify skills and circuit-from-description.
+
 ## 7. Risks and safeguards
 
 - **Prompt injection.** Serial output, the gateway page, library docs and

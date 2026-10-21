@@ -273,7 +273,21 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
-### v2.5.0-dev — AI agent, M0 (branch `agentic-iot-studio`, current)
+### v2.5.0-dev — AI agent (branch `agentic-iot-studio`, current)
+
+- **Working chat agent.** The panel now has a chat: you describe a task, the
+  agent calls tools on the live app (project overview, read/write files,
+  compile, run, stop, reset, serial output, wait-for-serial, and an HTTP GET
+  through the IoT gateway), applies changes immediately, and **Undo turn**
+  restores the project files from before the turn
+- Backend `/api/agent/llm` adapts one neutral format to the Anthropic and
+  OpenAI-compatible APIs (NVIDIA, OpenAI, Gemini, OpenRouter, Groq, Ollama,
+  custom); your key is only forwarded to the provider and never stored or logged
+- Settings has a **Test** button; NVIDIA (`nvapi-` keys) is a built-in preset
+- Not yet: adding/wiring parts, pressing buttons, the Raspberry Pi terminal,
+  streaming replies (milestones M3+ in `docs/AGENTIC-PLAN.md`)
+
+#### Earlier in this version: M0
 
 - New `overlay/` + `agent_patch.py`: copied into the Velxio tree after the
   white-label step, with anchored hooks (`/api/agent` router, the agent panel

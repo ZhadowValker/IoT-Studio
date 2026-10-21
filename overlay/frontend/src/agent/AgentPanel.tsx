@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PROVIDERS, getProvider } from './providers';
 import { clearKey, loadSettings, saveSettings, type AgentSettings } from './settings';
 import { setAgentOpen, useAgentOpen } from './agentUi';
+import { callLlm, type ChatMessage } from './llmClient';
+import { runTurn, type AgentEvent } from './loop';
+import { restoreCheckpoint, takeCheckpoint, type Checkpoint } from './tools';
 
 // IoT-Studio agent panel (M0): provider/key settings (opened from the toolbar
 // launcher, see AgentLauncher.tsx) and the shell
@@ -63,6 +66,44 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 600,
   },
+  chat: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+  feed: { flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 },
+  user: {
+    alignSelf: 'flex-end',
+    maxWidth: '88%',
+    padding: '7px 10px',
+    borderRadius: 10,
+    background: 'linear-gradient(135deg, #A70CFF 0%, #5a0a8c 100%)',
+    color: '#fff',
+    whiteSpace: 'pre-wrap',
+  },
+  bot: {
+    alignSelf: 'flex-start',
+    maxWidth: '92%',
+    padding: '7px 10px',
+    borderRadius: 10,
+    border,
+    background: 'var(--color-bg-input, #151518)',
+    whiteSpace: 'pre-wrap',
+    lineHeight: 1.45,
+  },
+  step: {
+    alignSelf: 'stretch',
+    padding: '4px 8px',
+    borderRadius: 6,
+    border,
+    fontSize: 12,
+    color: 'var(--color-fg-muted, #999)',
+  },
+  err: {
+    alignSelf: 'stretch',
+    padding: '7px 10px',
+    borderRadius: 8,
+    border: '1px solid #ff6b6b',
+    color: '#ff9b9b',
+    fontSize: 12,
+  },
+  composer: { borderTop: border, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 },
   note: {
     padding: 10,
     borderRadius: 8,
@@ -74,12 +115,99 @@ const styles = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
+type ChatItem =
+  | { id: number; kind: 'user' | 'bot' | 'err' | 'note'; text: string }
+  | { id: number; kind: 'step'; name: string; args: string; writes: boolean; result: string; ok: boolean };
+
+type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
+
 export function AgentPanel() {
   const open = useAgentOpen();
   const [settings, setSettings] = useState<AgentSettings>(() => loadSettings());
   const [saved, setSaved] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(true);
+  const [view, setView] = useState<'chat' | 'settings'>(() => {
+    const st = loadSettings();
+    return getProvider(st.providerId).needsKey && !st.apiKey ? 'settings' : 'chat';
+  });
+  const [items, setItems] = useState<ChatItem[]>([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<{ input: number; output: number; steps: number } | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const history = useRef<ChatMessage[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const feedRef = useRef<HTMLDivElement | null>(null);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
+  }, [items, busy]);
+
+  const push = useCallback((item: DistributiveOmit<ChatItem, 'id'>) => {
+    idRef.current += 1;
+    setItems((cur) => [...cur, { ...item, id: idRef.current } as ChatItem]);
+  }, []);
+
+  const onEvent = useCallback(
+    (e: AgentEvent) => {
+      if (e.type === 'assistant') push({ kind: 'bot', text: e.text });
+      else if (e.type === 'error') push({ kind: 'err', text: e.text });
+      else if (e.type === 'usage') setUsage({ input: e.input, output: e.output, steps: e.steps });
+      else if (e.type === 'tool')
+        push({ kind: 'step', name: e.name, args: e.args, writes: e.writes, result: e.result, ok: e.ok });
+    },
+    [push],
+  );
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setDraft('');
+    push({ kind: 'user', text });
+    setBusy(true);
+    setCheckpoints((c) => [...c, takeCheckpoint()]);
+    const ctl = new AbortController();
+    abortRef.current = ctl;
+    try {
+      await runTurn({ settings, history: history.current, userText: text, onEvent, signal: ctl.signal });
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+    }
+  };
+
+  const undoTurn = () => {
+    const cp = checkpoints[checkpoints.length - 1];
+    if (!cp || busy) return;
+    restoreCheckpoint(cp);
+    setCheckpoints((c) => c.slice(0, -1));
+    history.current.push({
+      role: 'user',
+      content: '[The user undid your last turn. The project files were restored to how they were before it.]',
+    });
+    push({ kind: 'note', text: 'Last turn undone: project files restored.' });
+  };
+
+  const newChat = () => {
+    if (busy) return;
+    history.current = [];
+    setItems([]);
+    setUsage(null);
+    setCheckpoints([]);
+  };
+
+  const testConnection = async () => {
+    setTestMsg('Testing…');
+    try {
+      const r = await callLlm(settings, 'Reply with the single word OK.', [{ role: 'user', content: 'ping' }], []);
+      setTestMsg(`Connected. Model replied: "${r.content.trim().slice(0, 40) || '(empty)'}"`);
+    } catch (e) {
+      setTestMsg(`Failed: ${(e as Error).message}`);
+    }
+  };
 
   const provider = getProvider(settings.providerId);
 
@@ -139,21 +267,106 @@ export function AgentPanel() {
         <aside style={styles.panel} aria-label="IoT-Studio AI agent">
           <div style={styles.head}>
             <span>AI agent</span>
-            <button
-              type="button"
-              style={{ ...styles.btn, padding: '3px 8px' }}
-              onClick={() => setAgentOpen(false)}
-            >
-              ✕
-            </button>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                style={{ ...styles.btn, padding: '3px 8px' }}
+                onClick={() => setView((v) => (v === 'chat' ? 'settings' : 'chat'))}
+                title={view === 'chat' ? 'Provider, model and key' : 'Back to the chat'}
+              >
+                {view === 'chat' ? 'Settings' : 'Chat'}
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.btn, padding: '3px 8px' }}
+                onClick={() => setAgentOpen(false)}
+              >
+                ✕
+              </button>
+            </span>
           </div>
 
+          {view === 'chat' ? (
+            <div style={styles.chat}>
+              <div style={styles.feed} ref={feedRef}>
+                {items.length === 0 && (
+                  <div style={styles.note}>
+                    Tell me what to build or fix, for example: “Blink the LED on GPIO 2 and print the
+                    state to serial”. I edit the files, compile, run and check the result. Every turn
+                    can be undone.
+                  </div>
+                )}
+                {items.map((it) =>
+                  it.kind === 'user' ? (
+                    <div key={it.id} style={styles.user}>{it.text}</div>
+                  ) : it.kind === 'bot' ? (
+                    <div key={it.id} style={styles.bot}>{it.text}</div>
+                  ) : it.kind === 'err' ? (
+                    <div key={it.id} style={styles.err}>{it.text}</div>
+                  ) : it.kind === 'note' ? (
+                    <div key={it.id} style={styles.hint}>{it.text}</div>
+                  ) : it.kind === 'step' ? (
+                    <details key={it.id} style={styles.step}>
+                      <summary style={{ cursor: 'pointer' }}>
+                        {it.ok ? (it.writes ? '✎ ' : '• ') : '⚠ '}
+                        {it.name}
+                        {it.args ? ` (${it.args})` : ''}
+                      </summary>
+                      <pre style={{ whiteSpace: 'pre-wrap', margin: '6px 0 0', maxHeight: 180, overflow: 'auto' }}>
+                        {it.result}
+                      </pre>
+                    </details>
+                  ) : null,
+                )}
+                {busy && <div style={styles.hint}>Working…</div>}
+              </div>
+              <div style={styles.composer}>
+                <textarea
+                  style={{ ...styles.input, resize: 'none', height: 64 }}
+                  value={draft}
+                  placeholder="Ask the agent…  (Enter to send, Shift+Enter for a new line)"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {busy ? (
+                    <button type="button" style={styles.btn} onClick={() => abortRef.current?.abort()}>
+                      Stop
+                    </button>
+                  ) : (
+                    <button type="button" style={styles.btnPrimary} onClick={() => void send()}>
+                      Send
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    style={{ ...styles.btn, opacity: checkpoints.length && !busy ? 1 : 0.4 }}
+                    disabled={!checkpoints.length || busy}
+                    onClick={undoTurn}
+                    title="Restore the project files to before the last agent turn"
+                  >
+                    Undo turn
+                  </button>
+                  <button type="button" style={{ ...styles.btn, borderColor: 'transparent' }} onClick={newChat}>
+                    New chat
+                  </button>
+                </div>
+                {usage && (
+                  <div style={styles.hint}>
+                    {settings.model} · steps {usage.steps} · tokens in {usage.input} / out {usage.output}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
           <div style={styles.body}>
             <div style={styles.note}>
-              Pick a provider and enter your own API key. The key stays in this browser and is
-              sent only with your requests; the server never stores it. Chat and project tools
-              arrive in the next milestones.
-            </div>
+              Pick a provider and enter your own API key. The key stays in this browser and is sent only with your requests; the server never stores it. </div>
 
             <label style={styles.label}>
               Provider
@@ -238,14 +451,19 @@ export function AgentPanel() {
               >
                 Forget key
               </button>
+              <button type="button" style={styles.btn} onClick={() => void testConnection()}>
+                Test
+              </button>
               {saved && <span style={{ alignSelf: 'center', color: accent }}>Saved</span>}
             </div>
+            {testMsg && <div style={styles.hint}>{testMsg}</div>}
 
             <div style={styles.hint}>
               Mode: auto-apply with undo. The agent edits the project directly; every turn gets a
               checkpoint you can revert.
             </div>
           </div>
+          )}
         </aside>
       )}
     </>
