@@ -59,10 +59,12 @@ def patch_hooks(tree: Path, rep: Report) -> None:
     replace_exact(
         rep,
         page,
-        "            <SimulatorCanvas headerSlot={!isMobile ? canvasHeaderSlot : null} />\n",
-        "            <SimulatorCanvas headerSlot={!isMobile ? canvasHeaderSlot : null} />\n"
-        "            <AgentPanel />\n",
-        "agent: mount AgentPanel (EditorPage.tsx)",
+        "          )}\n        </div>\n      </div>\n\n      {",
+        "          )}\n        </div>\n"
+        "        {/* IoT-Studio AI agent: docked as a third column, not over the canvas */}\n"
+        "        <AgentPanel />\n"
+        "      </div>\n\n      {",
+        "agent: dock AgentPanel beside the simulator (EditorPage.tsx)",
     )
     canvas = tree / "frontend" / "src" / "components" / "simulator" / "SimulatorCanvas.tsx"
     replace_exact(

@@ -273,6 +273,10 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.6.1-dev — docked agent panel, quieter serial
+- The AI agent panel is now a third column beside code and circuit instead of floating over the canvas (phones keep the overlay).
+- ESP32 serial monitor no longer shows the harmless `periph_ctrl: phy module clock bits` WiFi warning (QEMU artefact, about once a second).
+
 ### v2.6.0-dev — agent circuit tools
 - The agent can now search the part catalog, place parts, read pin names, wire pins (with GPIO4/D4/"4" and GND/GND2 aliases), remove parts, set properties and validate the circuit. Edits are auto-applied and covered by **Undo turn** (components and wires are checkpointed along with files). The circuit is read-only while the simulation runs.
 

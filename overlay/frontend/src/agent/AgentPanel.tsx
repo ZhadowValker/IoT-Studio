@@ -14,7 +14,23 @@ const accent = 'var(--color-accent-fg, #A70CFF)';
 const border = '1px solid var(--color-border-default, rgba(255,255,255,0.09))';
 
 const styles = {
+  // Docked: a flex column of the editor row, beside code and circuit.
   panel: {
+    position: 'relative',
+    flex: '0 0 380px',
+    width: 380,
+    minWidth: 0,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'var(--color-bg-canvas, #0a0a0c)',
+    color: 'var(--color-fg-default, #eee)',
+    borderLeft: border,
+    fontSize: 13,
+    overflow: 'hidden',
+  },
+  // Phones have no room for a third column: overlay instead.
+  panelOverlay: {
     position: 'fixed',
     top: 48,
     right: 0,
@@ -22,12 +38,7 @@ const styles = {
     width: 380,
     maxWidth: '100vw',
     zIndex: 1300,
-    display: 'flex',
-    flexDirection: 'column',
-    background: 'var(--color-bg-canvas, #0a0a0c)',
-    color: 'var(--color-fg-default, #eee)',
-    borderLeft: border,
-    fontSize: 13,
+    height: 'auto',
   },
   head: {
     display: 'flex',
@@ -276,7 +287,7 @@ export function AgentPanel() {
   return (
     <>
       {open && (
-        <aside style={styles.panel} aria-label="IoT-Studio AI agent">
+        <aside style={window.innerWidth < 768 ? { ...styles.panel, ...styles.panelOverlay } : styles.panel} aria-label="IoT-Studio AI agent">
           <div style={styles.head}>
             <span>AI agent</span>
             <span style={{ display: 'flex', gap: 6 }}>

@@ -802,6 +802,58 @@ def patch_wifi_line_buffer(tree: Path, rep: Report) -> None:
     )
 
 
+def patch_serial_noise(tree: Path, rep: Report) -> None:
+    """Hide the QEMU WiFi PHY clock warning from the serial monitor.
+
+    The emulated ESP32 has no real radio clock gating, so ESP-IDF prints
+    ``W (n) periph_ctrl: phy module clock bits 0x0, required 0x8f8f`` about
+    once a second while WiFi is on. It is harmless and buries the sketch's own
+    output, so whole lines matching it are dropped before they are forwarded.
+    """
+    path = tree / "backend" / "app" / "services" / "esp32_lib_manager.py"
+    replace_exact(
+        rep,
+        path,
+        "class _UartBuffer:\n",
+        "_IOTS_NOISE = ('periph_ctrl: phy module clock bits',)\n"
+        "\n\n"
+        "def _iots_filter(inst, text: str) -> str:\n"
+        "    \"\"\"IoT-Studio: drop known-harmless emulator log lines, keep everything else.\n"
+        "    A partial line is held back only while it looks like an ESP-IDF 'W (' log\n"
+        "    line, so prompts without a newline still show immediately.\"\"\"\n"
+        "    pend = getattr(inst, '_noise_tail', '') + text\n"
+        "    cut = max(pend.rfind('\\n'), pend.rfind('\\r')) + 1\n"
+        "    done, rest = pend[:cut], pend[cut:]\n"
+        "    out = ''.join(\n"
+        "        ln for ln in done.splitlines(True)\n"
+        "        if not any(n in ln for n in _IOTS_NOISE)\n"
+        "    )\n"
+        "    if rest[:3] == 'W (' or (rest and 'W (' [:len(rest)] == rest):\n"
+        "        setattr(inst, '_noise_tail', rest[-512:])\n"
+        "    else:\n"
+        "        setattr(inst, '_noise_tail', '')\n"
+        "        out += rest\n"
+        "    return out\n"
+        "\n\n"
+        "class _UartBuffer:\n",
+        "serial: noise filter helper",
+    )
+    pad = " " * 28
+    replace_exact(
+        rep,
+        path,
+        pad + "self._dispatch(inst, 'serial_output', {\n"
+        + pad + "    'data': text, 'uart': uart_id,\n"
+        + pad + "})\n",
+        pad + "_shown = _iots_filter(inst, text) if uart_id == 0 else text\n"
+        + pad + "if _shown:\n"
+        + pad + "    self._dispatch(inst, 'serial_output', {\n"
+        + pad + "        'data': _shown, 'uart': uart_id,\n"
+        + pad + "    })\n",
+        "serial: drop PHY clock warning lines",
+    )
+
+
 def write_notice(tree: Path, rep: Report) -> None:
     path = tree / "NOTICE-IoT-Studio.md"
     body = (
@@ -842,6 +894,7 @@ PATCHES = (
     patch_build_fixes,
     patch_wifi_status,
     patch_wifi_line_buffer,
+    patch_serial_noise,
     write_notice,
 )
 
