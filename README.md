@@ -273,6 +273,9 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.11.0-dev — no-overlap placement
+- `add_component` now places each part in free space beside the board, on the side of the pin it will connect to (`near_pin`) or a chosen `side`. Sizes come from what is actually painted (some parts, like the DHT sensors, paint far outside their element box), so parts no longer land on top of each other. The idea follows velxio-agentic's canvas layout engine.
+
 ### v2.10.0-dev — Raspberry Pi tools
 - New agent tools for the Raspberry Pi boards: `pi_wait_boot`, `pi_run` (one-line shell command, returns output and exit code; interrupts the running script first) and `pi_write_file`. Not applicable on other boards.
 

@@ -7,6 +7,7 @@ import { ComponentRegistry } from '../services/ComponentRegistry';
 import { createComponentFromMetadata } from '../components/DynamicComponent';
 import { useSimulatorStore } from '../store/useSimulatorStore';
 import { calculatePinPosition } from '../utils/pinPositionCalculator';
+import { findFreeSlot, sideOfPin, type Rect, type Side } from './placement';
 import type { Tool } from './tools';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -88,15 +89,101 @@ async function waitForMount(id: string): Promise<void> {
   }
 }
 
-function nextSlot(): { x: number; y: number } {
+/** Canvas zoom: screen size / layout size of a board (1 when unknown). */
+function canvasZoom(): number {
   const s = useSimulatorStore.getState();
-  const board = s.boards.find((b) => b.id === s.activeBoardId) ?? s.boards[0];
-  const el = board ? document.getElementById(board.id) : null;
-  const bw = el?.offsetWidth || 220;
-  const baseX = (board?.x ?? 100) + bw + 140;
-  const baseY = board?.y ?? 100;
-  const n = s.components.length;
-  return { x: baseX + Math.floor(n / 4) * 170, y: baseY + (n % 4) * 130 };
+  for (const b of s.boards) {
+    const el = document.getElementById(b.id);
+    if (el && el.offsetWidth > 0) {
+      const z = el.getBoundingClientRect().width / el.offsetWidth;
+      if (z > 0.05 && z < 20) return z;
+    }
+  }
+  return 1;
+}
+
+/** Union of the on-screen boxes of an element and everything drawn inside it,
+ *  shadow DOM included. Some parts (the DHT sensors, for one) report a tiny box
+ *  but paint a much larger body around it, so the element's own size lies. */
+function paintedBox(root: Element): DOMRect {
+  let box = root.getBoundingClientRect();
+  let l = box.left, t = box.top, r = box.right, b = box.bottom;
+  let seen = 0;
+  const walk = (node: Element) => {
+    if (seen++ > 600) return;
+    const q = node.getBoundingClientRect();
+    if (q.width > 0 && q.height > 0) {
+      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    }
+    for (const k of Array.from(node.children)) walk(k);
+    if (node.shadowRoot) for (const k of Array.from(node.shadowRoot.children)) walk(k);
+  };
+  walk(root);
+  return new DOMRect(l, t, r - l, b - t);
+}
+
+/** Where a thing is actually painted, in canvas (store) coordinates. The screen
+ *  box is mapped back through a board, whose element origin IS its store x/y, so
+ *  this is right however a part positions its own wrapper or paints outside its
+ *  element, and whatever the zoom and pan are. */
+function paintedRect(id: string): Rect | null {
+  const el = document.getElementById(id);
+  const s = useSimulatorStore.getState();
+  const ref = s.boards.find((b) => {
+    const e = document.getElementById(b.id);
+    return e && e.offsetWidth > 0;
+  });
+  const refEl = ref ? document.getElementById(ref.id) : null;
+  if (!el || !ref || !refEl) return null;
+  const z = canvasZoom();
+  const o = refEl.getBoundingClientRect();
+  const p = paintedBox(el);
+  return {
+    x: ref.x + (p.left - o.left) / z,
+    y: ref.y + (p.top - o.top) / z,
+    w: Math.max(el.offsetWidth, p.width / z),
+    h: Math.max(el.offsetHeight, p.height / z),
+  };
+}
+
+const PAD = 6;
+
+/** Rectangles already taken on the canvas: boards and parts as painted, padded. */
+function occupiedRects(except: string): Rect[] {
+  const s = useSimulatorStore.getState();
+  const out: Rect[] = [];
+  for (const b of s.boards) {
+    const r = paintedRect(b.id);
+    out.push(r ?? { x: b.x, y: b.y, w: 200, h: 200 });
+  }
+  for (const c of s.components) {
+    if (c.id === except) continue;
+    const r = paintedRect(c.id) ?? { x: c.x, y: c.y, w: 60, h: 60 };
+    out.push({ x: r.x - PAD, y: r.y - PAD, w: r.w + 2 * PAD, h: r.h + 2 * PAD });
+  }
+  return out;
+}
+
+/** Where a freshly mounted part should go: beside the board, on the side of its
+ *  target pin, in the first free slot that fits its painted size. Returns the
+ *  new store x/y for the part, or null when it cannot be measured yet. */
+function freeSpotFor(id: string, boardId: string | undefined, side: Side | undefined, nearPin: string | undefined) {
+  const s = useSimulatorStore.getState();
+  const board = s.boards.find((b) => b.id === boardId) ?? s.boards.find((b) => b.id === s.activeBoardId) ?? s.boards[0];
+  const comp = s.components.find((c) => c.id === id);
+  const me = paintedRect(id);
+  const br = board ? paintedRect(board.id) : null;
+  if (!board || !comp || !me || !br) return null;
+  let sd: Side = side ?? 'right';
+  if (!side && nearPin) {
+    const real = resolvePin(board.id, nearPin);
+    const pin = (document.getElementById(board.id) as (HTMLElement & { pinInfo?: { name: string; x: number; y: number }[] }) | null)
+      ?.pinInfo?.find((p) => p.name === real);
+    if (pin) sd = sideOfPin(pin, { w: br.w, h: br.h });
+  }
+  const p = findFreeSlot(br, sd, me.w + 2 * PAD, me.h + 2 * PAD, occupiedRects(id));
+  // Move the part by however far its painted box has to travel.
+  return { x: Math.round(comp.x + (p.x + PAD - me.x)), y: Math.round(comp.y + (p.y + PAD - me.y)), size: { w: me.w, h: me.h } };
 }
 
 interface Endpoint {
@@ -139,13 +226,16 @@ export const CIRCUIT_TOOLS: Tool[] = [
     name: 'add_component',
     description:
       'Place a part on the canvas next to the board. Returns its id and its exact pin names. ' +
-      'Never pass x/y unless the user asked for a position; placement is automatic. The simulation must be stopped.',
+      'Placement is automatic and never overlaps; pass near_pin (the board pin it will connect to) or side to choose the side. Never pass x/y unless the user asked for a position. The simulation must be stopped.',
     writes: true,
     parameters: {
       type: 'object',
       properties: {
         type: { type: 'string', description: 'Catalog id from search_components.' },
         properties: { type: 'object', description: 'Optional property overrides, e.g. {"color":"red"}.' },
+        side: { type: 'string', description: 'Optional: left, right, top or bottom of the board.' },
+        near_pin: { type: 'string', description: 'Optional: board pin this part will connect to; it is placed on that pin\'s side.' },
+        board: { type: 'string', description: 'Optional board id when there are several.' },
         x: { type: 'number' },
         y: { type: 'number' },
       },
@@ -157,16 +247,36 @@ export const CIRCUIT_TOOLS: Tool[] = [
       await reg.load();
       const meta = reg.getById(str(args, 'type'));
       if (!meta) throw new Error(`Unknown part "${str(args, 'type')}". Use search_components first.`);
-      const slot = nextSlot();
-      const x = typeof args.x === 'number' ? args.x : slot.x;
-      const y = typeof args.y === 'number' ? args.y : slot.y;
-      const comp = createComponentFromMetadata(meta, x, y);
+      const explicit = typeof args.x === 'number' && typeof args.y === 'number';
+      // Mount first at a spot clear of the board, measure it, then settle it into free space.
+      const comp = createComponentFromMetadata(meta, explicit ? (args.x as number) : -400, explicit ? (args.y as number) : -400);
       if (args.properties && typeof args.properties === 'object') {
         Object.assign(comp.properties, args.properties as Record<string, unknown>);
       }
       useSimulatorStore.getState().addComponent(comp);
       await waitForMount(comp.id);
-      return { id: comp.id, type: meta.id, pins: (pinsOf(comp.id) ?? []).map((p) => p.name) };
+      let placedAt = { x: comp.x, y: comp.y };
+      if (!explicit) {
+        const sd = str(args, 'side').toLowerCase();
+        const side = (['left', 'right', 'top', 'bottom'] as const).find((v) => v === sd);
+        const bd = str(args, 'board') || undefined;
+        const np = str(args, 'near_pin') || undefined;
+        // Parts finish laying out a moment after they mount (images, shadow DOM);
+        // measure, settle, and re-measure at the new spot: some parts paint differently
+        // once placed (the DHT's body moves), so the final box is what counts.
+        let last = '';
+        for (let pass = 0; pass < 4; pass++) {
+          await sleep(150);
+          const spot = freeSpotFor(comp.id, bd, side, np);
+          if (!spot) continue;
+          const sig = `${spot.x},${spot.y}`;
+          if (sig === last) break;
+          last = sig;
+          placedAt = { x: spot.x, y: spot.y };
+          useSimulatorStore.getState().updateComponent(comp.id, placedAt);
+        }
+      }
+      return { id: comp.id, type: meta.id, at: placedAt, pins: (pinsOf(comp.id) ?? []).map((p) => p.name) };
     },
   },
   {
