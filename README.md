@@ -273,6 +273,9 @@ miss:
 - Cosmetic: container line renders as `Up ... (ports)` instead of a raw
   pipe-separated format
 
+### v2.9.0-dev — board knowledge
+- New agent tool `get_board_info`: chip family, logic voltage, WiFi support, analog inputs, supported languages, build target and the real I2C/SPI/UART pins of each board (read from the simulator's own pin classifier). The agent consults it before choosing pins and won't promise WiFi on an Uno.
+
 ### v2.8.0-dev — streaming replies
 - The agent's text now appears word by word as the model writes it (OpenAI-compatible providers incl. NVIDIA, and Anthropic). New `/api/agent/llm/stream` endpoint (newline-delimited JSON); the panel falls back to the one-shot call if the stream is unavailable.
 
